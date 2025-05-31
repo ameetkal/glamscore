@@ -20,12 +20,16 @@ function sendResult(data: any) {
 // Helper function to analyze profile information
 async function analyzeProfile(page: Page) {
   const profileInfo = await page.evaluate(() => {
-    const name = document.querySelector('h1')?.textContent || '';
-    const category = document.querySelector('[data-item-id="category"]')?.textContent || '';
-    const description = document.querySelector('[data-item-id="description"]')?.textContent || '';
+    // Updated selectors for Google Maps business profile
+    const name = document.querySelector('h1.DUwDvf')?.textContent?.trim() || '';
+    const category = document.querySelector('button[jsaction*="category"]')?.textContent?.trim() || '';
+    const description = document.querySelector('[data-item-id*="description"]')?.textContent?.trim() || 
+                       document.querySelector('.editorial-summary')?.textContent?.trim() || '';
     
     return { name, category, description };
   });
+
+  console.log('Profile Analysis:', profileInfo); // Debug log
 
   const status = 
     profileInfo.name && profileInfo.category && profileInfo.description
@@ -45,13 +49,29 @@ async function analyzeProfile(page: Page) {
 // Helper function to analyze photos
 async function analyzePhotos(page: Page) {
   const photoInfo = await page.evaluate(() => {
-    const hasProfilePhoto = !!document.querySelector('[data-photo-id="profile"]');
-    const hasCoverPhoto = !!document.querySelector('[data-photo-id="cover"]');
-    const hasInteriorPhotos = !!document.querySelector('[data-photo-id="interior"]');
-    const hasExteriorPhotos = !!document.querySelector('[data-photo-id="exterior"]');
+    // Updated selectors for Google Maps photos
+    const photoElements = document.querySelectorAll('button[jsaction*="photos"] img, button[aria-label*="photo"] img');
+    const hasProfilePhoto = Array.from(photoElements).some(img => 
+      img.getAttribute('alt')?.toLowerCase().includes('profile') || 
+      img.getAttribute('aria-label')?.toLowerCase().includes('profile')
+    );
+    const hasCoverPhoto = Array.from(photoElements).some(img => 
+      img.getAttribute('alt')?.toLowerCase().includes('cover') || 
+      img.getAttribute('aria-label')?.toLowerCase().includes('cover')
+    );
+    const hasInteriorPhotos = Array.from(photoElements).some(img => 
+      img.getAttribute('alt')?.toLowerCase().includes('interior') || 
+      img.getAttribute('aria-label')?.toLowerCase().includes('interior')
+    );
+    const hasExteriorPhotos = Array.from(photoElements).some(img => 
+      img.getAttribute('alt')?.toLowerCase().includes('exterior') || 
+      img.getAttribute('aria-label')?.toLowerCase().includes('exterior')
+    );
     
     return { hasProfilePhoto, hasCoverPhoto, hasInteriorPhotos, hasExteriorPhotos };
   });
+
+  console.log('Photos Analysis:', photoInfo); // Debug log
 
   const status = 
     photoInfo.hasProfilePhoto && photoInfo.hasCoverPhoto && (photoInfo.hasInteriorPhotos || photoInfo.hasExteriorPhotos)
@@ -69,13 +89,16 @@ async function analyzePhotos(page: Page) {
 // Helper function to analyze business information
 async function analyzeInformation(page: Page) {
   const info = await page.evaluate(() => {
-    const hours = !!document.querySelector('[data-item-id="hours"]');
-    const phone = !!document.querySelector('[data-item-id="phone"]');
-    const website = !!document.querySelector('[data-item-id="website"]');
-    const address = !!document.querySelector('[data-item-id="address"]');
+    // Updated selectors for Google Maps business information
+    const hours = !!document.querySelector('button[data-item-id*="hours"], button[aria-label*="hours"]');
+    const phone = !!document.querySelector('button[data-item-id*="phone"], button[aria-label*="phone"], a[href^="tel:"]');
+    const website = !!document.querySelector('a[data-item-id*="authority"], a[aria-label*="website"]');
+    const address = !!document.querySelector('button[data-item-id*="address"], button[aria-label*="address"]');
     
     return { hours, phone, website, address };
   });
+
+  console.log('Information Analysis:', info); // Debug log
 
   const status = 
     info.hours && info.phone && info.website && info.address
@@ -93,16 +116,19 @@ async function analyzeInformation(page: Page) {
 // Helper function to analyze reviews
 async function analyzeReviews(page: Page) {
   const reviewInfo = await page.evaluate(() => {
-    const ratingElement = document.querySelector('[data-item-id="rating"]');
-    const reviewsElement = document.querySelector('[data-item-id="reviews"]');
-    const responsesElement = document.querySelector('[data-item-id="responses"]');
+    // Updated selectors for Google Maps reviews
+    const ratingElement = document.querySelector('div.F7nice span[aria-hidden="true"]');
+    const reviewsElement = document.querySelector('div.F7nice span[aria-label*="reviews"]');
+    const responsesElement = document.querySelector('div[aria-label*="responses"]');
     
-    const averageRating = parseFloat(ratingElement?.textContent || '0');
+    const averageRating = parseFloat(ratingElement?.textContent?.trim() || '0');
     const totalReviews = parseInt(reviewsElement?.textContent?.replace(/[^0-9]/g, '') || '0');
     const responseRate = parseFloat(responsesElement?.textContent?.replace(/[^0-9.]/g, '') || '0');
     
     return { averageRating, totalReviews, responseRate };
   });
+
+  console.log('Reviews Analysis:', reviewInfo); // Debug log
 
   const status = 
     reviewInfo.averageRating >= 4.5 && reviewInfo.totalReviews >= 50 && reviewInfo.responseRate >= 80
@@ -120,17 +146,20 @@ async function analyzeReviews(page: Page) {
 // Helper function to analyze posts
 async function analyzePosts(page: Page) {
   const postInfo = await page.evaluate(() => {
-    const posts = document.querySelectorAll('[data-item-id="post"]');
+    // Updated selectors for Google Maps posts
+    const posts = document.querySelectorAll('div[role="article"], div[aria-label*="post"]');
     const hasPosts = posts.length > 0;
     const postFrequency = posts.length; // Posts in the last 30 days
     const postEngagement = Array.from(posts).reduce((total, post) => {
-      const likes = parseInt(post.querySelector('[data-item-id="likes"]')?.textContent || '0');
-      const comments = parseInt(post.querySelector('[data-item-id="comments"]')?.textContent || '0');
+      const likes = parseInt(post.querySelector('span[aria-label*="likes"]')?.textContent?.replace(/[^0-9]/g, '') || '0');
+      const comments = parseInt(post.querySelector('span[aria-label*="comments"]')?.textContent?.replace(/[^0-9]/g, '') || '0');
       return total + likes + comments;
     }, 0) / (posts.length || 1);
     
     return { hasPosts, postFrequency, postEngagement };
   });
+
+  console.log('Posts Analysis:', postInfo); // Debug log
 
   const status = 
     postInfo.hasPosts && postInfo.postFrequency >= 4 && postInfo.postEngagement >= 10
@@ -148,15 +177,18 @@ async function analyzePosts(page: Page) {
 // Helper function to analyze services
 async function analyzeServices(page: Page) {
   const serviceInfo = await page.evaluate(() => {
-    const services = document.querySelectorAll('[data-item-id="service"]');
+    // Updated selectors for Google Maps services
+    const services = document.querySelectorAll('div[role="listitem"], div[aria-label*="service"]');
     const hasServices = services.length > 0;
     const serviceCount = services.length;
     const hasPricing = Array.from(services).some(service => 
-      !!service.querySelector('[data-item-id="price"]')
+      !!service.querySelector('span[aria-label*="price"], span[aria-label*="cost"]')
     );
     
     return { hasServices, serviceCount, hasPricing };
   });
+
+  console.log('Services Analysis:', serviceInfo); // Debug log
 
   const status = 
     serviceInfo.hasServices && serviceInfo.serviceCount >= 5 && serviceInfo.hasPricing
@@ -279,6 +311,19 @@ function generateRecommendations(analysis: any) {
   return recommendations;
 }
 
+function isValidGoogleMapsUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    // Accept all Google Maps URL formats
+    return (urlObj.hostname.match(/^(www\.)?google\.com$/) && urlObj.pathname.includes('/maps/place/')) ||
+           (urlObj.hostname === 'g.co' && urlObj.pathname.startsWith('/kgs/')) ||
+           (urlObj.hostname === 'maps.google.com' && urlObj.pathname.includes('/place/')) ||
+           (urlObj.hostname === 'maps.app.goo.gl');
+  } catch {
+    return false;
+  }
+}
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
   const stream = new TransformStream();
@@ -288,15 +333,26 @@ export async function POST(request: NextRequest) {
   (async () => {
     try {
       const formData = await request.formData();
-      const url = formData.get('url') as string;
+      let url = formData.get('url') as string;
 
       if (!url) {
         throw new Error('Please provide a Google Maps business URL');
       }
 
+      // Clean and format the URL
+      url = url.trim();
+      // Remove @ symbol if present at the start
+      url = url.replace(/^@/, '');
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        url = 'https://' + url;
+      }
+
+      console.log('Initial URL:', url); // Debug log
+
       // Validate URL format
-      if (!url.includes('google.com/maps')) {
-        throw new Error('Please provide a valid Google Maps URL');
+      if (!isValidGoogleMapsUrl(url)) {
+        console.error('Invalid URL format:', url); // Debug log
+        throw new Error('Please provide a valid Google Maps URL (e.g., https://maps.app.goo.gl/..., https://www.google.com/maps/place/..., or https://g.co/kgs/...)');
       }
 
       let browser;
@@ -304,25 +360,89 @@ export async function POST(request: NextRequest) {
         // Send initial progress
         await writer.write(sendProgress('initializing'));
 
-        // Launch browser
+        // Launch browser with additional settings for better redirect handling
         browser = await puppeteer.launch({
           headless: true,
-          args: ['--no-sandbox', '--disable-setuid-sandbox']
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-web-security',
+            '--disable-features=IsolateOrigins,site-per-process'
+          ]
         });
 
         const page = await browser.newPage();
+        
+        // Enable request interception to log redirects
+        await page.setRequestInterception(true);
+        
+        // Track all redirects
+        const redirects: string[] = [];
+        page.on('request', request => {
+          console.log('Request URL:', request.url());
+          redirects.push(request.url());
+          request.continue();
+        });
+        
+        page.on('response', response => {
+          console.log('Response URL:', response.url(), 'Status:', response.status());
+          if (response.status() >= 300 && response.status() < 400) {
+            console.log('Redirect Location:', response.headers()['location']);
+          }
+        });
+
         await page.setViewport({ width: 1280, height: 800 });
 
         // Send loading progress
         await writer.write(sendProgress('loading_profile'));
         
-        // Navigate to the URL and wait for the business profile to load
-        await page.goto(url, { waitUntil: 'networkidle0' });
+        // Handle all types of Google Maps URLs that need redirects
+        if (url.includes('g.co/kgs/') || url.includes('maps.app.goo.gl')) {
+          console.log('Processing shortened URL:', url);
+          
+          // Set a longer timeout for redirects
+          await page.setDefaultNavigationTimeout(30000);
+          
+          try {
+            // Navigate to the URL and wait for all redirects to complete
+            const response = await page.goto(url, {
+              waitUntil: 'networkidle0',
+              timeout: 30000
+            });
 
-        // Wait for key elements to be present
-        await page.waitForSelector('h1', { timeout: 10000 }).catch(() => {
+            if (!response) {
+              throw new Error('No response received from the URL');
+            }
+
+            console.log('Redirect chain:', redirects); // Debug log
+            console.log('Final URL after redirects:', page.url());
+            
+            // Check if we ended up on a Google Maps business page
+            const finalUrl = page.url();
+            if (!finalUrl.includes('google.com/maps/place/') && !finalUrl.includes('maps.google.com/place/')) {
+              console.error('Redirect did not lead to a Google Maps business page. Final URL:', finalUrl);
+              console.error('Full redirect chain:', redirects);
+              throw new Error('The provided URL did not redirect to a valid Google Maps business page. Please make sure you copied the correct business URL from Google Maps.');
+            }
+          } catch (error) {
+            console.error('Navigation error:', error);
+            console.error('Redirect chain so far:', redirects);
+            throw new Error(`Failed to navigate to the business page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        } else {
+          // Navigate directly for google.com/maps URLs
+          await page.goto(url, { waitUntil: 'networkidle0' });
+        }
+
+        // Wait for key elements to be present with a longer timeout
+        try {
+          await page.waitForSelector('h1', { timeout: 15000 });
+          console.log('Found business profile elements on page:', page.url());
+        } catch (error) {
+          console.error('Could not find business profile elements on page:', page.url());
+          console.error('Page content:', await page.content());
           throw new Error('Could not find business profile. Please make sure the URL is correct and the business is listed on Google Maps.');
-        });
+        }
 
         // Analyze different aspects of the profile
         await writer.write(sendProgress('analyzing_profile'));

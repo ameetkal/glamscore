@@ -86,10 +86,30 @@ interface ResultData {
   data: Analysis;
 }
 
-type ApiResponse = ProgressData | ResultData;
+interface ErrorData {
+  type: 'error';
+  error: string;
+}
+
+type ApiResponse = ProgressData | ResultData | ErrorData;
+
+function isValidGoogleMapsUrl(url: string): boolean {
+  try {
+    const urlObj = new URL(url);
+    // Accept all Google Maps URL formats
+    return (urlObj.hostname.match(/^(www\.)?google\.com$/) && urlObj.pathname.includes('/maps/place/')) ||
+           (urlObj.hostname === 'g.co' && urlObj.pathname.startsWith('/kgs/')) ||
+           (urlObj.hostname === 'maps.google.com' && urlObj.pathname.includes('/place/')) ||
+           (urlObj.hostname === 'maps.app.goo.gl');
+  } catch {
+    return false;
+  }
+}
 
 function formatGbpUrl(url: string): string {
   url = url.trim();
+  // Remove @ symbol if present at the start
+  url = url.replace(/^@/, '');
   
   // If it's a naked domain (no protocol), add https://
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
@@ -157,10 +177,12 @@ export default function GoogleBusinessAudit() {
 
     try {
       const formattedUrl = formatGbpUrl(url);
-      new URL(formattedUrl);
+      if (!isValidGoogleMapsUrl(formattedUrl)) {
+        throw new Error('Please provide a valid Google Maps business URL');
+      }
       setUrl(formattedUrl);
     } catch (err) {
-      setError('Please enter a valid Google Maps URL');
+      setError('Please enter a valid Google Maps business URL (e.g., https://maps.app.goo.gl/..., https://www.google.com/maps/place/..., or https://g.co/kgs/...)');
       return;
     }
     
@@ -170,6 +192,8 @@ export default function GoogleBusinessAudit() {
       const formData = new FormData();
       formData.append('url', url);
 
+      console.log('Starting analysis for URL:', url); // Debug log
+
       const response = await fetch('/api/google-business-audit', {
         method: 'POST',
         body: formData,
@@ -177,21 +201,26 @@ export default function GoogleBusinessAudit() {
 
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('API Error:', errorData); // Debug log
         throw new Error(errorData.error || 'Failed to analyze Google Business Profile');
       }
 
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Failed to start analysis');
+      if (!response.body) {
+        throw new Error('No response stream available');
+      }
 
+      const reader = response.body.getReader();
       let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
         
         if (done) {
+          console.log('Stream complete, processing final buffer'); // Debug log
           if (buffer.trim()) {
             try {
               const data = JSON.parse(buffer) as ApiResponse;
+              console.log('Final data:', data); // Debug log
               if (data.type === 'result') {
                 setAnalysis(data.data);
                 setProgress({
@@ -199,9 +228,12 @@ export default function GoogleBusinessAudit() {
                   progress: 100,
                   message: progressMessages.complete
                 });
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
               }
             } catch (e) {
-              console.error('Error parsing final buffer:', e);
+              console.error('Error parsing final buffer:', e, 'Buffer:', buffer); // Debug log
+              throw new Error('Failed to process analysis results');
             }
           }
           break;
@@ -209,6 +241,7 @@ export default function GoogleBusinessAudit() {
 
         const chunk = new TextDecoder().decode(value);
         buffer += chunk;
+        console.log('Received chunk:', chunk); // Debug log
 
         // Process complete JSON objects in the buffer
         let newlineIndex;
@@ -219,21 +252,43 @@ export default function GoogleBusinessAudit() {
           if (line.trim()) {
             try {
               const data = JSON.parse(line) as ApiResponse;
+              console.log('Parsed data:', data); // Debug log
+              
               if (data.type === 'progress') {
+                console.log('Updating progress:', data.stage); // Debug log
                 setProgress({
                   stage: data.stage,
                   progress: progressPercentages[data.stage],
                   message: progressMessages[data.stage]
                 });
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              } else if (data.type === 'result') {
+                console.log('Received result data'); // Debug log
+                setAnalysis(data.data);
+                setProgress({
+                  stage: 'complete',
+                  progress: 100,
+                  message: progressMessages.complete
+                });
               }
             } catch (e) {
-              console.error('Error parsing progress data:', e);
+              console.error('Error parsing line:', e, 'Line:', line); // Debug log
+              if (line.includes('error')) {
+                throw new Error(line);
+              }
             }
           }
         }
       }
     } catch (err) {
+      console.error('Analysis error:', err); // Debug log
       setError(err instanceof Error ? err.message : 'An error occurred during analysis');
+      setProgress({
+        stage: 'initializing',
+        progress: 0,
+        message: 'Analysis failed'
+      });
     } finally {
       setIsLoading(false);
     }
@@ -290,7 +345,7 @@ export default function GoogleBusinessAudit() {
                 </ol>
                 <p className="text-sm text-gray-500 mt-4">
                   Note: Make sure you&apos;re copying the URL from your business&apos;s Google Maps listing.
-                  The URL should look something like: https://www.google.com/maps/place/Your+Business+Name
+                  The URL should look something like: https://maps.app.goo.gl/... or https://www.google.com/maps/place/Your+Business+Name
                 </p>
               </div>
             </div>

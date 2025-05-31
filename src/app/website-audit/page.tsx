@@ -11,52 +11,63 @@ interface Recommendation {
   status: 'green' | 'yellow' | 'red';
 }
 
+interface CoreWebVitals {
+  lcp: number;
+  fid: number;
+  cls: number;
+}
+
 interface AuditMetrics {
-  seo: {
+  technicalSeo: {
+    pageLoadSpeed: number;
+    mobileFriendly: boolean;
+    coreWebVitals: CoreWebVitals;
+    brokenLinks: number;
+    status: 'green' | 'yellow' | 'red';
+    score: number;
+  };
+  onPageSeo: {
     metaTitle: string;
     metaDescription: string;
     h1Tags: string[];
-    keywordDensity: number;
-    hasSitemap: boolean;
+    keywordPresence: number;
+    altTextCoverage: number;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  performance: {
-    loadTime: number;
-    lighthouseScore: number;
-    imageOptimization: boolean;
+  contentCompleteness: {
+    servicesListed: boolean;
+    imageQuality: number;
+    staffBios: boolean;
+    testimonials: boolean;
+    blog: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  mobile: {
-    isResponsive: boolean;
-    touchElements: boolean;
-    viewportMeta: boolean;
+  brandingConsistency: {
+    logo: boolean;
+    colorUsage: boolean;
+    typography: boolean;
+    consistentTone: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  branding: {
-    hasLogo: boolean;
-    colorConsistency: boolean;
-    fontConsistency: boolean;
+  socialContactIntegration: {
+    socialMediaLinks: boolean;
+    contactForm: boolean;
+    bookingIntegration: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  social: {
-    hasInstagram: boolean;
-    hasFacebook: boolean;
-    hasSocialFeeds: boolean;
+  securityAccessibility: {
+    https: boolean;
+    ariaTags: boolean;
+    altText: boolean;
+    contrastCompliance: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  contact: {
-    hasPhone: boolean;
-    hasEmail: boolean;
-    hasLocation: boolean;
-    hasBooking: boolean;
-    status: 'green' | 'yellow' | 'red';
-  };
-  accessibility: {
-    contrastRatio: number;
-    hasAriaTags: boolean;
-    hasAltTexts: boolean;
-    status: 'green' | 'yellow' | 'red';
-  };
+  overallScore: number;
 }
 
 interface Analysis {
@@ -85,6 +96,355 @@ interface AnalysisProgress {
   message: string;
 }
 
+interface ScoringCriteria {
+  maxPoints: number;
+  criteria: {
+    [key: string]: {
+      weight: number;
+      thresholds: {
+        green: number;
+        yellow: number;
+        red: number;
+      };
+      description: string;
+    };
+  };
+}
+
+const scoringSystem: Record<keyof Omit<AuditMetrics, 'overallScore'>, ScoringCriteria> = {
+  technicalSeo: {
+    maxPoints: 30,
+    criteria: {
+      pageLoadSpeed: {
+        weight: 10,
+        thresholds: {
+          green: 2000, // 2 seconds or less
+          yellow: 4000, // 4 seconds
+          red: 4000 // More than 4 seconds
+        },
+        description: 'Page load time in milliseconds'
+      },
+      mobileFriendly: {
+        weight: 5,
+        thresholds: {
+          green: 1, // Fully responsive
+          yellow: 0.5, // Partially responsive
+          red: 0 // Not responsive
+        },
+        description: 'Mobile responsiveness score'
+      },
+      coreWebVitals: {
+        weight: 10,
+        thresholds: {
+          green: 0.9, // All vitals pass
+          yellow: 0.6, // Some vitals pass
+          red: 0.3 // Most vitals fail
+        },
+        description: 'Core Web Vitals performance'
+      },
+      brokenLinks: {
+        weight: 5,
+        thresholds: {
+          green: 0, // No broken links
+          yellow: 5, // 1-5 broken links
+          red: 5 // More than 5 broken links
+        },
+        description: 'Number of broken links'
+      }
+    }
+  },
+  onPageSeo: {
+    maxPoints: 20,
+    criteria: {
+      metaTitle: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Perfect title (50-60 chars, includes keywords)
+          yellow: 0.5, // Acceptable title
+          red: 0 // Missing or poor title
+        },
+        description: 'Meta title optimization'
+      },
+      metaDescription: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Perfect description (150-160 chars, includes keywords)
+          yellow: 0.5, // Acceptable description
+          red: 0 // Missing or poor description
+        },
+        description: 'Meta description optimization'
+      },
+      h1Tags: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Perfect H1 structure
+          yellow: 0.5, // Acceptable H1 structure
+          red: 0 // Poor H1 structure
+        },
+        description: 'H1 tag optimization'
+      },
+      keywordPresence: {
+        weight: 4,
+        thresholds: {
+          green: 80, // 80-100% keyword coverage
+          yellow: 50, // 50-79% keyword coverage
+          red: 50 // Less than 50% keyword coverage
+        },
+        description: 'Keyword presence in content'
+      },
+      altTextCoverage: {
+        weight: 4,
+        thresholds: {
+          green: 90, // 90-100% images have alt text
+          yellow: 60, // 60-89% images have alt text
+          red: 60 // Less than 60% images have alt text
+        },
+        description: 'Image alt text coverage'
+      }
+    }
+  },
+  contentCompleteness: {
+    maxPoints: 25,
+    criteria: {
+      servicesListed: {
+        weight: 8,
+        thresholds: {
+          green: 1, // All services listed with details
+          yellow: 0.5, // Basic service list
+          red: 0 // Missing or incomplete service list
+        },
+        description: 'Service listing completeness'
+      },
+      imageQuality: {
+        weight: 5,
+        thresholds: {
+          green: 8, // 8-10/10 image quality
+          yellow: 5, // 5-7/10 image quality
+          red: 5 // Less than 5/10 image quality
+        },
+        description: 'Image quality score'
+      },
+      staffBios: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Complete staff profiles
+          yellow: 0.5, // Basic staff information
+          red: 0 // Missing staff information
+        },
+        description: 'Staff bio completeness'
+      },
+      testimonials: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Multiple verified testimonials
+          yellow: 0.5, // Basic testimonials
+          red: 0 // No testimonials
+        },
+        description: 'Testimonial presence and quality'
+      },
+      blog: {
+        weight: 4,
+        thresholds: {
+          green: 1, // Active blog with quality content
+          yellow: 0.5, // Basic blog presence
+          red: 0 // No blog
+        },
+        description: 'Blog content quality and activity'
+      }
+    }
+  },
+  brandingConsistency: {
+    maxPoints: 10,
+    criteria: {
+      logo: {
+        weight: 3,
+        thresholds: {
+          green: 1, // Professional logo used consistently
+          yellow: 0.5, // Basic logo usage
+          red: 0 // No logo or inconsistent usage
+        },
+        description: 'Logo presence and consistency'
+      },
+      colorUsage: {
+        weight: 2,
+        thresholds: {
+          green: 1, // Consistent brand colors
+          yellow: 0.5, // Some color consistency
+          red: 0 // Inconsistent color usage
+        },
+        description: 'Brand color consistency'
+      },
+      typography: {
+        weight: 2,
+        thresholds: {
+          green: 1, // Consistent typography
+          yellow: 0.5, // Basic typography consistency
+          red: 0 // Inconsistent typography
+        },
+        description: 'Typography consistency'
+      },
+      consistentTone: {
+        weight: 3,
+        thresholds: {
+          green: 1, // Consistent brand voice
+          yellow: 0.5, // Some tone consistency
+          red: 0 // Inconsistent tone
+        },
+        description: 'Brand voice consistency'
+      }
+    }
+  },
+  socialContactIntegration: {
+    maxPoints: 10,
+    criteria: {
+      socialMediaLinks: {
+        weight: 4,
+        thresholds: {
+          green: 1, // All social media linked
+          yellow: 0.5, // Some social media linked
+          red: 0 // No social media links
+        },
+        description: 'Social media integration'
+      },
+      contactForm: {
+        weight: 3,
+        thresholds: {
+          green: 1, // Professional contact form
+          yellow: 0.5, // Basic contact form
+          red: 0 // No contact form
+        },
+        description: 'Contact form quality'
+      },
+      bookingIntegration: {
+        weight: 3,
+        thresholds: {
+          green: 1, // Integrated booking system
+          yellow: 0.5, // Basic booking option
+          red: 0 // No booking option
+        },
+        description: 'Booking system integration'
+      }
+    }
+  },
+  securityAccessibility: {
+    maxPoints: 5,
+    criteria: {
+      https: {
+        weight: 1,
+        thresholds: {
+          green: 1, // HTTPS enabled
+          yellow: 0, // No HTTPS
+          red: 0 // No HTTPS
+        },
+        description: 'HTTPS implementation'
+      },
+      ariaTags: {
+        weight: 1,
+        thresholds: {
+          green: 1, // ARIA tags implemented
+          yellow: 0.5, // Some ARIA tags
+          red: 0 // No ARIA tags
+        },
+        description: 'ARIA tag implementation'
+      },
+      altText: {
+        weight: 1,
+        thresholds: {
+          green: 1, // All images have alt text
+          yellow: 0.5, // Some images have alt text
+          red: 0 // No alt text
+        },
+        description: 'Image alt text implementation'
+      },
+      contrastCompliance: {
+        weight: 2,
+        thresholds: {
+          green: 1, // WCAG compliant
+          yellow: 0.5, // Partially compliant
+          red: 0 // Not compliant
+        },
+        description: 'Color contrast compliance'
+      }
+    }
+  }
+};
+
+// Helper function to calculate category score
+function calculateCategoryScore(category: keyof typeof scoringSystem, metrics: any): number {
+  if (!metrics) return 0;
+  
+  const criteria = scoringSystem[category].criteria;
+  let totalScore = 0;
+  let maxPossibleScore = 0;
+
+  Object.entries(criteria).forEach(([key, criterion]) => {
+    // Skip if the metric doesn't exist in the data
+    if (!(key in metrics)) {
+      maxPossibleScore += criterion.weight;
+      return;
+    }
+
+    const value = metrics[key];
+    let score = 0;
+
+    try {
+      if (typeof value === 'boolean') {
+        score = value ? criterion.weight : 0;
+      } else if (typeof value === 'number') {
+        if (key === 'coreWebVitals') {
+          // Special handling for core web vitals
+          const vitals = metrics.coreWebVitals as unknown as CoreWebVitals;
+          if (vitals && typeof vitals === 'object') {
+            const lcpScore = (vitals.lcp ?? 0) <= 2.5 ? 1 : (vitals.lcp ?? 0) <= 4 ? 0.5 : 0;
+            const fidScore = (vitals.fid ?? 0) <= 100 ? 1 : (vitals.fid ?? 0) <= 300 ? 0.5 : 0;
+            const clsScore = (vitals.cls ?? 0) <= 0.1 ? 1 : (vitals.cls ?? 0) <= 0.25 ? 0.5 : 0;
+            score = ((lcpScore + fidScore + clsScore) / 3) * criterion.weight;
+          }
+        } else {
+          // For other numeric values
+          const numValue = value ?? 0;
+          if (numValue >= criterion.thresholds.green) {
+            score = criterion.weight;
+          } else if (numValue >= criterion.thresholds.yellow) {
+            score = criterion.weight * 0.5;
+          } else {
+            score = 0;
+          }
+        }
+      }
+
+      totalScore += score;
+      maxPossibleScore += criterion.weight;
+    } catch (error) {
+      console.error(`Error calculating score for ${category}.${key}:`, error);
+      maxPossibleScore += criterion.weight;
+    }
+  });
+
+  return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * scoringSystem[category].maxPoints : 0;
+}
+
+// Helper function to calculate overall score
+function calculateOverallScore(metrics: AuditMetrics | null | undefined): number {
+  if (!metrics) return 0;
+
+  const categories = Object.keys(scoringSystem) as Array<keyof typeof scoringSystem>;
+  let totalScore = 0;
+
+  categories.forEach(category => {
+    try {
+      const categoryMetrics = metrics[category];
+      if (categoryMetrics) {
+        totalScore += calculateCategoryScore(category, categoryMetrics);
+      }
+    } catch (error) {
+      console.error(`Error calculating score for category ${category}:`, error);
+    }
+  });
+
+  return Math.round(totalScore);
+}
+
 function formatUrl(url: string): string {
   // Remove any whitespace
   url = url.trim();
@@ -104,8 +464,6 @@ function formatUrl(url: string): string {
 
 export default function WebsiteAudit() {
   const [url, setUrl] = useState('');
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
@@ -149,15 +507,6 @@ export default function WebsiteAudit() {
     setUrl(e.target.value);
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -168,31 +517,17 @@ export default function WebsiteAudit() {
       message: progressMessages.initializing
     });
     
-    if (!url && !selectedFile) {
-      setError('Please provide either a website URL or upload a screenshot');
+    if (!url) {
+      setError('Please provide your website URL');
       return;
     }
 
-    if (url) {
-      try {
-        // Format the URL before sending
-        const formattedUrl = formatUrl(url);
-        // Validate the formatted URL
-        new URL(formattedUrl);
-        setUrl(formattedUrl); // Update the input with the formatted URL
-      } catch (err) {
-        setError('Please enter a valid website URL (e.g., example.com or www.example.com)');
-        return;
-      }
-    }
-
-    if (selectedFile && !selectedFile.type.startsWith('image/')) {
-      setError('Please upload an image file');
-      return;
-    }
-
-    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
-      setError('File size should be less than 5MB');
+    try {
+      const formattedUrl = formatUrl(url);
+      new URL(formattedUrl);
+      setUrl(formattedUrl);
+    } catch (err) {
+      setError('Please enter a valid website URL (e.g., example.com or www.example.com)');
       return;
     }
     
@@ -200,8 +535,7 @@ export default function WebsiteAudit() {
     
     try {
       const formData = new FormData();
-      if (url) formData.append('url', url);
-      if (selectedFile) formData.append('screenshot', selectedFile);
+      formData.append('url', url);
 
       const response = await fetch('/api/website-audit', {
         method: 'POST',
@@ -324,7 +658,7 @@ export default function WebsiteAudit() {
             GlamScore Website Audit
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Enter your beauty business&apos;s website URL or upload a screenshot to get personalized recommendations
+            Enter your beauty business&apos;s website URL to get personalized recommendations
           </p>
           <div className="mt-4 space-x-4">
             <Link 
@@ -358,90 +692,24 @@ export default function WebsiteAudit() {
                 value={url}
                 onChange={handleUrlChange}
                 placeholder="Enter your domain (e.g., example.com)"
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C6B62] focus:border-[#1C6B62]"
                 disabled={isLoading}
               />
-            </div>
-
-            <div className="relative">
-              <div className="absolute inset-0 flex items-center">
-                <div className="w-full border-t border-gray-300"></div>
-              </div>
-              <div className="relative flex justify-center text-sm">
-                <span className="px-2 bg-white text-gray-500">Or</span>
-              </div>
-            </div>
-
-            <div>
-              <label 
-                htmlFor="screenshot" 
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
-                Upload Website Screenshot
-              </label>
-              <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-lg">
-                <div className="space-y-1 text-center">
-                  <svg
-                    className="mx-auto h-12 w-12 text-gray-400"
-                    stroke="currentColor"
-                    fill="none"
-                    viewBox="0 0 48 48"
-                    aria-hidden="true"
-                  >
-                    <path
-                      d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                    />
-                  </svg>
-                  <div className="flex text-sm text-gray-600">
-                    <label
-                      htmlFor="screenshot"
-                      className="relative cursor-pointer bg-white rounded-md font-medium text-blue-600 hover:text-blue-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-blue-500"
-                    >
-                      <span>Upload a file</span>
-                      <input
-                        id="screenshot"
-                        name="screenshot"
-                        type="file"
-                        accept="image/*"
-                        className="sr-only"
-                        onChange={handleFileChange}
-                        disabled={isLoading}
-                      />
-                    </label>
-                    <p className="pl-1">or drag and drop</p>
-                  </div>
-                  <p className="text-xs text-gray-500">
-                    PNG, JPG, GIF up to 5MB
-                  </p>
-                </div>
-              </div>
-              {previewUrl && (
-                <div className="mt-4 relative w-full h-48">
-                  <Image
-                    src={previewUrl}
-                    alt="Preview"
-                    fill
-                    className="object-contain rounded-lg shadow-sm"
-                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                  />
-                </div>
-              )}
               {error && (
                 <p className="mt-2 text-sm text-red-600">{error}</p>
               )}
             </div>
+
             {isLoading && (
               <div className="mt-4">
                 <ProgressBar />
               </div>
             )}
+
             <button
               type="submit"
               className="w-full bg-[#1C6B62] text-white px-8 py-3 rounded-lg hover:bg-[#15554D] transition-colors disabled:bg-[#1C6B62]/50 disabled:cursor-not-allowed"
-              disabled={isLoading || (!url && !selectedFile)}
+              disabled={isLoading || !url}
             >
               {isLoading ? 'Analyzing...' : 'Get Free Audit'}
             </button>
@@ -450,70 +718,160 @@ export default function WebsiteAudit() {
 
         {analysis && (
           <div className="max-w-4xl mx-auto mt-12 bg-white rounded-xl shadow-lg p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">
-              Analysis Results
-            </h2>
+            <div className="mb-8">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Analysis Results
+              </h2>
+              <div className="flex items-center justify-between">
+                <p className="text-gray-600">Overall Score</p>
+                <div className="text-3xl font-bold text-[#1C6B62]">
+                  {calculateOverallScore(analysis?.websiteAnalysis ?? null)}%
+                </div>
+              </div>
+            </div>
             
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {Object.entries(analysis.websiteAnalysis).map(([category, metrics]) => (
-                <div key={category} className="bg-gray-50 rounded-lg p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="text-lg font-semibold text-gray-900 capitalize">
-                      {category}
-                    </h3>
-                    <div className={`w-3 h-3 rounded-full ${
-                      metrics.status === 'green' ? 'bg-green-500' :
-                      metrics.status === 'yellow' ? 'bg-yellow-500' :
-                      'bg-red-500'
-                    }`} />
+              {Object.entries(analysis.websiteAnalysis || {}).map(([category, metrics]) => {
+                if (category === 'overallScore') return null;
+                if (!metrics) return null;
+                
+                const categoryWeights = {
+                  technicalSeo: 30,
+                  onPageSeo: 20,
+                  contentCompleteness: 25,
+                  brandingConsistency: 10,
+                  socialContactIntegration: 10,
+                  securityAccessibility: 5
+                };
+
+                const categoryNames = {
+                  technicalSeo: 'Technical SEO',
+                  onPageSeo: 'On-Page SEO',
+                  contentCompleteness: 'Content Completeness',
+                  brandingConsistency: 'Branding Consistency',
+                  socialContactIntegration: 'Social/Contact Integration',
+                  securityAccessibility: 'Security & Accessibility'
+                };
+
+                const weight = categoryWeights[category as keyof typeof categoryWeights] ?? 0;
+                const name = categoryNames[category as keyof typeof categoryNames] ?? category;
+                const score = (metrics as any).score ?? 0;
+                const status = (metrics as any).status ?? 'yellow';
+
+                return (
+                  <div key={category} className="bg-gray-50 rounded-lg p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-900">
+                          {name}
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                          Weight: {weight}%
+                        </p>
+                      </div>
+                      <div className="flex items-center">
+                        <div className={`w-3 h-3 rounded-full mr-2 ${
+                          status === 'green' ? 'bg-green-500' :
+                          status === 'yellow' ? 'bg-yellow-500' :
+                          'bg-red-500'
+                        }`} />
+                        <span className="text-lg font-semibold text-[#1C6B62]">
+                          {score.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3 text-sm">
+                      {Object.entries(metrics).map(([key, value]) => {
+                        if (key === 'status' || key === 'score') return null;
+                        
+                        if (key === 'coreWebVitals') {
+                          const vitals = value as CoreWebVitals;
+                          if (!vitals) return null;
+                          return (
+                            <div key={key} className="space-y-2">
+                              <p className="font-medium text-gray-700">Core Web Vitals:</p>
+                              <div className="pl-4 space-y-1">
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">LCP</span>
+                                  <span className={(vitals.lcp ?? 0) <= 2.5 ? 'text-green-600' : 'text-red-600'}>
+                                    {(vitals.lcp ?? 0).toFixed(2)}s
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">FID</span>
+                                  <span className={(vitals.fid ?? 0) <= 100 ? 'text-green-600' : 'text-red-600'}>
+                                    {(vitals.fid ?? 0).toFixed(0)}ms
+                                  </span>
+                                </div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-600">CLS</span>
+                                  <span className={(vitals.cls ?? 0) <= 0.1 ? 'text-green-600' : 'text-red-600'}>
+                                    {(vitals.cls ?? 0).toFixed(2)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        if (typeof value === 'boolean') {
+                          return (
+                            <div key={key} className="flex justify-between items-center">
+                              <span className="text-gray-600 capitalize">
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                              <span className={value ? 'text-green-600' : 'text-red-600'}>
+                                {value ? '✓' : '✗'}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        if (typeof value === 'number') {
+                          return (
+                            <div key={key} className="flex justify-between items-center">
+                              <span className="text-gray-600 capitalize">
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                              <span className="text-gray-900">
+                                {key === 'pageLoadSpeed' ? `${(value ?? 0).toFixed(0)}ms` :
+                                 key === 'keywordPresence' || key === 'altTextCoverage' ? `${(value ?? 0).toFixed(1)}%` :
+                                 key === 'imageQuality' ? `${(value ?? 0).toFixed(1)}/10` :
+                                 value ?? 0}
+                              </span>
+                            </div>
+                          );
+                        }
+
+                        if (Array.isArray(value)) {
+                          return (
+                            <div key={key} className="flex justify-between items-center">
+                              <span className="text-gray-600 capitalize">
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                              <span className="text-gray-900">{value?.length ?? 0}</span>
+                            </div>
+                          );
+                        }
+
+                        if (typeof value === 'string') {
+                          return (
+                            <div key={key} className="flex justify-between items-center">
+                              <span className="text-gray-600 capitalize">
+                                {key.replace(/([A-Z])/g, ' $1').trim()}
+                              </span>
+                              <span className="text-gray-900 truncate max-w-[200px]">{value ?? ''}</span>
+                            </div>
+                          );
+                        }
+
+                        return null;
+                      })}
+                    </div>
                   </div>
-                  <div className="space-y-2 text-sm">
-                    {Object.entries(metrics).map(([key, value]) => {
-                      if (key === 'status') return null;
-                      if (typeof value === 'boolean') {
-                        return (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            <span className={value ? 'text-green-600' : 'text-red-600'}>
-                              {value ? '✓' : '✗'}
-                            </span>
-                          </div>
-                        );
-                      }
-                      if (typeof value === 'number') {
-                        return (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            <span className="text-gray-900">
-                              {key === 'loadTime' ? `${value}ms` :
-                               key === 'keywordDensity' ? `${value.toFixed(1)}%` :
-                               key === 'lighthouseScore' ? `${value.toFixed(0)}/100` :
-                               value}
-                            </span>
-                          </div>
-                        );
-                      }
-                      if (Array.isArray(value)) {
-                        return (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            <span className="text-gray-900">{value.length}</span>
-                          </div>
-                        );
-                      }
-                      if (typeof value === 'string') {
-                        return (
-                          <div key={key} className="flex items-center justify-between">
-                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
-                            <span className="text-gray-900 truncate max-w-[200px]">{value}</span>
-                          </div>
-                        );
-                      }
-                      return null;
-                    })}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
 
             <div className="space-y-8">
@@ -552,7 +910,7 @@ export default function WebsiteAudit() {
 
                   {category.suggestions.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-medium text-blue-600 mb-2">
+                      <h4 className="text-sm font-medium text-[#1C6B62] mb-2">
                         Recommendations
                       </h4>
                       <ul className="space-y-2">
