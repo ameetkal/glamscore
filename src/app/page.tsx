@@ -93,7 +93,7 @@ export default function Home() {
             Salon Digital Audit
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
-            Get personalized recommendations to improve your salon's online presence
+            Get personalized recommendations to improve your salon&apos;s online presence
           </p>
           <div className="flex justify-center space-x-8">
             <Link 
@@ -118,7 +118,7 @@ export default function Home() {
             </h2>
             <p className="text-gray-600">
               Select either an Instagram profile audit or website audit to get started.
-              Each audit provides specific recommendations to help improve your salon's online presence.
+              Each audit provides specific recommendations to help improve your salon&apos;s online presence.
             </p>
           </div>
 

@@ -89,9 +89,6 @@ async function analyzeWebsiteUrl(url: string) {
 
 async function analyzeWebsiteScreenshot(imageBuffer: Buffer) {
   try {
-    // Get image metadata
-    const metadata = await sharp(imageBuffer).metadata();
-    
     // Convert to grayscale for analysis
     const { data, info } = await sharp(imageBuffer)
       .grayscale()
@@ -99,10 +96,9 @@ async function analyzeWebsiteScreenshot(imageBuffer: Buffer) {
       .toBuffer({ resolveWithObject: true });
 
     // Basic image analysis
-    const totalPixels = info.width * info.height;
     const pixelValues = Array.from(data);
-    const meanBrightness = pixelValues.reduce((sum, val) => sum + val, 0) / totalPixels;
-    const variance = pixelValues.reduce((sum, val) => sum + Math.pow(val - meanBrightness, 2), 0) / totalPixels;
+    const meanBrightness = pixelValues.reduce((sum, val) => sum + val, 0) / pixelValues.length;
+    const variance = pixelValues.reduce((sum, val) => sum + Math.pow(val - meanBrightness, 2), 0) / pixelValues.length;
     const stdDev = Math.sqrt(variance);
 
     // Design quality is based on contrast (stdDev) and overall brightness
