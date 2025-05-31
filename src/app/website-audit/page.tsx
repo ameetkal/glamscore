@@ -309,8 +309,8 @@ export default function WebsiteAudit() {
       </div>
       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
         <div
-          className="h-full bg-blue-600 transition-all duration-300 ease-in-out"
-          style={{ width: `${progress.progress}%` }}
+          className="h-full transition-all duration-300 ease-in-out"
+          style={{ width: `${progress.progress}%`, backgroundColor: '#1C6B62' }}
         />
       </div>
     </div>
@@ -326,12 +326,18 @@ export default function WebsiteAudit() {
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
             Enter your beauty business&apos;s website URL or upload a screenshot to get personalized recommendations
           </p>
-          <div className="mt-4">
+          <div className="mt-4 space-x-4">
             <Link 
               href="/instagram-audit" 
-              className="text-blue-600 hover:text-blue-800 transition-colors"
+              className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
             >
               Switch to Instagram Profile Audit →
+            </Link>
+            <Link 
+              href="/google-business-audit" 
+              className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
+            >
+              Switch to Google Business Audit →
             </Link>
           </div>
         </div>
@@ -434,7 +440,7 @@ export default function WebsiteAudit() {
             )}
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
+              className="w-full bg-[#1C6B62] text-white px-8 py-3 rounded-lg hover:bg-[#15554D] transition-colors disabled:bg-[#1C6B62]/50 disabled:cursor-not-allowed"
               disabled={isLoading || (!url && !selectedFile)}
             >
               {isLoading ? 'Analyzing...' : 'Get Free Audit'}
@@ -552,7 +558,7 @@ export default function WebsiteAudit() {
                       <ul className="space-y-2">
                         {category.suggestions.map((suggestion, suggestionIndex) => (
                           <li key={suggestionIndex} className="flex items-start">
-                            <span className="text-blue-600 mr-2">•</span>
+                            <span className="text-[#1C6B62] mr-2">•</span>
                             <span className="text-gray-600">{suggestion}</span>
                           </li>
                         ))}
@@ -565,8 +571,17 @@ export default function WebsiteAudit() {
           </div>
         )}
 
+        <div className="mt-8 text-center">
+          <Link
+            href="/"
+            className="text-[#1C6B62] hover:text-[#15554D] font-medium"
+          >
+            ← Back to Home
+          </Link>
+        </div>
+
         <div className="mt-8 text-center text-gray-600">
-          <p>Powered by <a href="https://glammatic.com" className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">Glammatic.com</a></p>
+          <p>Powered by <a href="https://glammatic.com" className="text-[#1C6B62] hover:underline" target="_blank" rel="noopener noreferrer">Glammatic.com</a></p>
         </div>
       </div>
     </main>
