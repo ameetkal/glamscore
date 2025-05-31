@@ -18,9 +18,6 @@ async function analyzeProfileImage(imageBuffer: Buffer) {
       .raw()
       .toBuffer({ resolveWithObject: true });
 
-    // Basic image analysis
-    const totalPixels = info.width * info.height;
-    
     // Define regions more precisely based on typical Instagram profile layout
     const headerHeight = Math.floor(info.height * 0.15); // Profile picture and name
     const bioHeight = Math.floor(info.height * 0.25); // Bio section

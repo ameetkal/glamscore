@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 
 interface Recommendation {
   category: string;
@@ -97,7 +98,7 @@ export default function WebsiteAudit() {
             Salon Website Audit
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Enter your salon's website URL or upload a screenshot to get personalized recommendations
+            Enter your salon&apos;s website URL or upload a screenshot to get personalized recommendations
           </p>
           <div className="mt-4">
             <Link 
@@ -186,11 +187,13 @@ export default function WebsiteAudit() {
                 </div>
               </div>
               {previewUrl && (
-                <div className="mt-4">
-                  <img
+                <div className="mt-4 relative w-full h-48">
+                  <Image
                     src={previewUrl}
                     alt="Preview"
-                    className="max-h-48 mx-auto rounded-lg shadow-sm"
+                    fill
+                    className="object-contain rounded-lg shadow-sm"
+                    sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                   />
                 </div>
               )}

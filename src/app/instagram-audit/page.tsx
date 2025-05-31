@@ -100,7 +100,7 @@ export default function InstagramAudit() {
             Instagram Profile Audit for Salons
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Enter your salon&apos;s Instagram handle or upload a screenshot to get personalized recommendations
+            Get personalized recommendations to improve your salon&apos;s online presence
           </p>
           <div className="mt-4">
             <Link 
