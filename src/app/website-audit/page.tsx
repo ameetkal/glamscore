@@ -8,19 +8,98 @@ interface Recommendation {
   category: string;
   suggestions: string[];
   strengths: string[];
+  status: 'green' | 'yellow' | 'red';
+}
+
+interface AuditMetrics {
+  seo: {
+    metaTitle: string;
+    metaDescription: string;
+    h1Tags: string[];
+    keywordDensity: number;
+    hasSitemap: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  performance: {
+    loadTime: number;
+    lighthouseScore: number;
+    imageOptimization: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  mobile: {
+    isResponsive: boolean;
+    touchElements: boolean;
+    viewportMeta: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  branding: {
+    hasLogo: boolean;
+    colorConsistency: boolean;
+    fontConsistency: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  social: {
+    hasInstagram: boolean;
+    hasFacebook: boolean;
+    hasSocialFeeds: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  contact: {
+    hasPhone: boolean;
+    hasEmail: boolean;
+    hasLocation: boolean;
+    hasBooking: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
+  accessibility: {
+    contrastRatio: number;
+    hasAriaTags: boolean;
+    hasAltTexts: boolean;
+    status: 'green' | 'yellow' | 'red';
+  };
 }
 
 interface Analysis {
   timestamp: string;
   recommendations: Recommendation[];
-  websiteAnalysis: {
-    hasMobileVersion: boolean;
-    hasContactInfo: boolean;
-    hasServicesPage: boolean;
-    hasBookingSystem: boolean;
-    loadSpeed: string;
-    designQuality: string;
-  };
+  websiteAnalysis: AuditMetrics;
+}
+
+// Add new type for progress tracking
+type AnalysisStage = 
+  | 'initializing'
+  | 'loading_website'
+  | 'analyzing_seo'
+  | 'analyzing_performance'
+  | 'analyzing_mobile'
+  | 'analyzing_branding'
+  | 'analyzing_social'
+  | 'analyzing_contact'
+  | 'analyzing_accessibility'
+  | 'generating_recommendations'
+  | 'complete';
+
+interface AnalysisProgress {
+  stage: AnalysisStage;
+  progress: number;
+  message: string;
+}
+
+function formatUrl(url: string): string {
+  // Remove any whitespace
+  url = url.trim();
+  
+  // If it's a naked domain (no protocol), add https://
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  
+  // If it's a naked domain without www, add www.
+  if (!url.includes('://www.') && !url.includes('://localhost')) {
+    url = url.replace('://', '://www.');
+  }
+  
+  return url;
 }
 
 export default function WebsiteAudit() {
@@ -30,6 +109,41 @@ export default function WebsiteAudit() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [progress, setProgress] = useState<AnalysisProgress>({
+    stage: 'initializing',
+    progress: 0,
+    message: 'Initializing analysis...'
+  });
+
+  // Add progress messages for each stage
+  const progressMessages: Record<AnalysisStage, string> = {
+    initializing: 'Initializing analysis...',
+    loading_website: 'Loading website...',
+    analyzing_seo: 'Analyzing SEO elements...',
+    analyzing_performance: 'Checking performance metrics...',
+    analyzing_mobile: 'Testing mobile responsiveness...',
+    analyzing_branding: 'Evaluating branding consistency...',
+    analyzing_social: 'Checking social media integration...',
+    analyzing_contact: 'Verifying contact information...',
+    analyzing_accessibility: 'Testing accessibility features...',
+    generating_recommendations: 'Generating recommendations...',
+    complete: 'Analysis complete!'
+  };
+
+  // Add progress percentages for each stage
+  const progressPercentages: Record<AnalysisStage, number> = {
+    initializing: 0,
+    loading_website: 10,
+    analyzing_seo: 20,
+    analyzing_performance: 30,
+    analyzing_mobile: 40,
+    analyzing_branding: 50,
+    analyzing_social: 60,
+    analyzing_contact: 70,
+    analyzing_accessibility: 80,
+    generating_recommendations: 90,
+    complete: 100
+  };
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setUrl(e.target.value);
@@ -48,10 +162,28 @@ export default function WebsiteAudit() {
     e.preventDefault();
     setError('');
     setAnalysis(null);
+    setProgress({
+      stage: 'initializing',
+      progress: 0,
+      message: progressMessages.initializing
+    });
     
     if (!url && !selectedFile) {
       setError('Please provide either a website URL or upload a screenshot');
       return;
+    }
+
+    if (url) {
+      try {
+        // Format the URL before sending
+        const formattedUrl = formatUrl(url);
+        // Validate the formatted URL
+        new URL(formattedUrl);
+        setUrl(formattedUrl); // Update the input with the formatted URL
+      } catch (err) {
+        setError('Please enter a valid website URL (e.g., example.com or www.example.com)');
+        return;
+      }
     }
 
     if (selectedFile && !selectedFile.type.startsWith('image/')) {
@@ -76,29 +208,123 @@ export default function WebsiteAudit() {
         body: formData,
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to analyze website');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to analyze website');
       }
 
-      setAnalysis(data.data);
+      // Create a reader for the response stream
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('Failed to start analysis');
+
+      let buffer = ''; // Buffer to store partial chunks
+
+      // Read the stream
+      while (true) {
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          // Process any remaining data in the buffer
+          if (buffer.trim()) {
+            try {
+              const data = JSON.parse(buffer);
+              if (data.type === 'result') {
+                setAnalysis(data.data);
+                setProgress({
+                  stage: 'complete',
+                  progress: 100,
+                  message: progressMessages.complete
+                });
+              }
+            } catch (e) {
+              console.error('Error parsing final buffer:', e);
+            }
+          }
+          break;
+        }
+
+        // Convert the chunk to text and add to buffer
+        const chunk = new TextDecoder().decode(value);
+        buffer += chunk;
+
+        // Process complete JSON objects in the buffer
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // Keep the last partial line in the buffer
+
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const data = JSON.parse(line);
+            console.log('Received data:', data); // Debug log
+
+            if (data.type === 'progress' && typeof data.stage === 'string') {
+              const stage = data.stage as AnalysisStage;
+              if (stage in progressPercentages) {
+                console.log('Updating progress:', stage); // Debug log
+                setProgress({
+                  stage,
+                  progress: progressPercentages[stage],
+                  message: progressMessages[stage]
+                });
+              }
+            } else if (data.type === 'result') {
+              console.log('Received final result'); // Debug log
+              setAnalysis(data.data);
+              setProgress({
+                stage: 'complete',
+                progress: 100,
+                message: progressMessages.complete
+              });
+            } else if (data.type === 'error') {
+              throw new Error(data.error || 'Analysis failed');
+            }
+          } catch (e) {
+            console.error('Error parsing JSON:', e, 'Line:', line); // Debug log
+            if (line.includes('error')) {
+              throw new Error(line);
+            }
+          }
+        }
+      }
     } catch (err) {
+      console.error('Analysis error:', err); // Debug log
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
+      setProgress({
+        stage: 'initializing',
+        progress: 0,
+        message: 'Analysis failed'
+      });
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Add progress bar component
+  const ProgressBar = () => (
+    <div className="w-full space-y-2">
+      <div className="flex justify-between text-sm text-gray-600">
+        <span>{progress.message}</span>
+        <span>{progress.progress}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-blue-600 transition-all duration-300 ease-in-out"
+          style={{ width: `${progress.progress}%` }}
+        />
+      </div>
+    </div>
+  );
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Salon Website Audit
+            GlamScore Website Audit
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Enter your salon&apos;s website URL or upload a screenshot to get personalized recommendations
+            Enter your beauty business&apos;s website URL or upload a screenshot to get personalized recommendations
           </p>
           <div className="mt-4">
             <Link 
@@ -120,12 +346,12 @@ export default function WebsiteAudit() {
                 Website URL
               </label>
               <input
-                type="url"
+                type="text"
                 id="url"
                 name="url"
                 value={url}
                 onChange={handleUrlChange}
-                placeholder="https://your-salon-website.com"
+                placeholder="Enter your domain (e.g., example.com)"
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 disabled={isLoading}
               />
@@ -201,6 +427,11 @@ export default function WebsiteAudit() {
                 <p className="mt-2 text-sm text-red-600">{error}</p>
               )}
             </div>
+            {isLoading && (
+              <div className="mt-4">
+                <ProgressBar />
+              </div>
+            )}
             <button
               type="submit"
               className="w-full bg-blue-600 text-white px-8 py-3 rounded-lg hover:bg-blue-700 transition-colors disabled:bg-blue-400 disabled:cursor-not-allowed"
@@ -212,17 +443,90 @@ export default function WebsiteAudit() {
         </div>
 
         {analysis && (
-          <div className="max-w-2xl mx-auto mt-12 bg-white rounded-xl shadow-lg p-8">
+          <div className="max-w-4xl mx-auto mt-12 bg-white rounded-xl shadow-lg p-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-6">
               Analysis Results
             </h2>
             
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+              {Object.entries(analysis.websiteAnalysis).map(([category, metrics]) => (
+                <div key={category} className="bg-gray-50 rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-semibold text-gray-900 capitalize">
+                      {category}
+                    </h3>
+                    <div className={`w-3 h-3 rounded-full ${
+                      metrics.status === 'green' ? 'bg-green-500' :
+                      metrics.status === 'yellow' ? 'bg-yellow-500' :
+                      'bg-red-500'
+                    }`} />
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    {Object.entries(metrics).map(([key, value]) => {
+                      if (key === 'status') return null;
+                      if (typeof value === 'boolean') {
+                        return (
+                          <div key={key} className="flex items-center justify-between">
+                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className={value ? 'text-green-600' : 'text-red-600'}>
+                              {value ? '✓' : '✗'}
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (typeof value === 'number') {
+                        return (
+                          <div key={key} className="flex items-center justify-between">
+                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className="text-gray-900">
+                              {key === 'loadTime' ? `${value}ms` :
+                               key === 'keywordDensity' ? `${value.toFixed(1)}%` :
+                               key === 'lighthouseScore' ? `${value.toFixed(0)}/100` :
+                               value}
+                            </span>
+                          </div>
+                        );
+                      }
+                      if (Array.isArray(value)) {
+                        return (
+                          <div key={key} className="flex items-center justify-between">
+                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className="text-gray-900">{value.length}</span>
+                          </div>
+                        );
+                      }
+                      if (typeof value === 'string') {
+                        return (
+                          <div key={key} className="flex items-center justify-between">
+                            <span className="text-gray-600 capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</span>
+                            <span className="text-gray-900 truncate max-w-[200px]">{value}</span>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+
             <div className="space-y-8">
               {analysis.recommendations.map((category, index) => (
                 <div key={index} className="border-b border-gray-200 pb-6 last:border-0">
-                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                    {category.category}
-                  </h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-xl font-semibold text-gray-900">
+                      {category.category}
+                    </h3>
+                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      category.status === 'green' ? 'bg-green-100 text-green-800' :
+                      category.status === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-red-100 text-red-800'
+                    }`}>
+                      {category.status === 'green' ? 'Good' :
+                       category.status === 'yellow' ? 'Needs Improvement' :
+                       'Critical'}
+                    </div>
+                  </div>
                   
                   {category.strengths.length > 0 && (
                     <div className="mb-4">

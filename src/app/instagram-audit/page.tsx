@@ -97,10 +97,10 @@ export default function InstagramAudit() {
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
           <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            Instagram Profile Audit for Salons
+            GlamScore Instagram Profile Audit
           </h1>
           <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Get personalized recommendations to improve your salon&apos;s online presence
+            Get personalized recommendations to improve your beauty business&apos;s online presence
           </p>
           <div className="mt-4">
             <Link 

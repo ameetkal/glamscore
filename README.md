@@ -1,6 +1,6 @@
-# Salon Audit
+# GlamScore
 
-A digital audit tool for salons that analyzes both Instagram profiles and websites to provide personalized recommendations for improving online presence.
+A digital audit tool for beauty businesses that analyzes both Instagram profiles and websites to provide personalized recommendations for improving online presence.
 
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
