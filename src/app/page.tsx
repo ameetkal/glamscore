@@ -3,17 +3,42 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { ScoringResult } from '@/types/instagram';
+import { ScoringResult as WebsiteScoringResult } from '@/types/website';
+import { ScoringResult as GoogleBusinessScoringResult } from '@/types/google-business';
 
 export default function Home() {
-  const [latestScore, setLatestScore] = useState<ScoringResult | null>(null);
+  const [instagramScore, setInstagramScore] = useState<ScoringResult | null>(null);
+  const [websiteScore, setWebsiteScore] = useState<WebsiteScoringResult | null>(null);
+  const [googleBusinessScore, setGoogleBusinessScore] = useState<GoogleBusinessScoringResult | null>(null);
 
   useEffect(() => {
-    const savedScore = localStorage.getItem('instagramAuditScore');
-    if (savedScore) {
+    // Load Instagram score
+    const savedInstagramScore = localStorage.getItem('instagramAuditScore');
+    if (savedInstagramScore) {
       try {
-        setLatestScore(JSON.parse(savedScore));
+        setInstagramScore(JSON.parse(savedInstagramScore));
       } catch (e) {
-        console.error('Error loading saved score:', e);
+        console.error('Error loading saved Instagram score:', e);
+      }
+    }
+
+    // Load website score
+    const savedWebsiteScore = localStorage.getItem('websiteAuditScore');
+    if (savedWebsiteScore) {
+      try {
+        setWebsiteScore(JSON.parse(savedWebsiteScore));
+      } catch (e) {
+        console.error('Error loading saved website score:', e);
+      }
+    }
+
+    // Load Google Business score
+    const savedGoogleBusinessScore = localStorage.getItem('googleBusinessAuditScore');
+    if (savedGoogleBusinessScore) {
+      try {
+        setGoogleBusinessScore(JSON.parse(savedGoogleBusinessScore));
+      } catch (e) {
+        console.error('Error loading saved Google Business score:', e);
       }
     }
   }, []);
@@ -28,32 +53,72 @@ export default function Home() {
           <p className="text-xl text-gray-600 max-w-2xl mx-auto mb-8">
             Get personalized recommendations to improve your beauty business&apos;s online presence
           </p>
+          {instagramScore && websiteScore && googleBusinessScore && (
+            <div className="mb-8">
+              <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+                Your Overall GlamScore
+              </h2>
+              <div className="inline-flex items-center justify-center w-40 h-40 rounded-full bg-gradient-to-r from-[#E1306C] via-[#1C6B62] to-[#4285F4] text-white">
+                <span className="text-5xl font-bold">
+                  {Math.round((instagramScore.percentage + websiteScore.percentage + googleBusinessScore.percentage) / 3)}%
+                </span>
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-4 max-w-md mx-auto">
+                <div className="text-sm">
+                  <div className="text-[#E1306C] font-medium">Instagram</div>
+                  <div className="text-gray-600">{instagramScore.percentage}%</div>
+                </div>
+                <div className="text-sm">
+                  <div className="text-[#1C6B62] font-medium">Website</div>
+                  <div className="text-gray-600">{websiteScore.percentage}%</div>
+                </div>
+                <div className="text-sm">
+                  <div className="text-[#4285F4] font-medium">Google Business</div>
+                  <div className="text-gray-600">{googleBusinessScore.percentage}%</div>
+                </div>
+              </div>
+            </div>
+          )}
           <div className="flex justify-center space-x-4 flex-wrap">
             <div className="flex flex-col items-center">
-              <Link 
-                href="/instagram-audit" 
+              <Link
+                href="/instagram-audit"
                 className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
               >
                 Instagram Profile Audit
               </Link>
-              {latestScore && (
+              {instagramScore && (
                 <div className="text-sm text-gray-600">
-                  Latest Score: {latestScore.percentage}%
+                  Latest Score: {instagramScore.percentage}%
                 </div>
               )}
             </div>
-            <Link 
-              href="/website-audit" 
-              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
-            >
-              Website Audit
-            </Link>
-            <Link 
-              href="/google-business-audit" 
-              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
-            >
-              Google Business Audit
-            </Link>
+            <div className="flex flex-col items-center">
+              <Link
+                href="/website-audit"
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
+              >
+                Website Audit
+              </Link>
+              {websiteScore && (
+                <div className="text-sm text-gray-600">
+                  Latest Score: {websiteScore.percentage}%
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col items-center">
+              <Link 
+                href="/google-business-audit" 
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
+              >
+                Google Business Audit
+              </Link>
+              {googleBusinessScore && (
+                <div className="text-sm text-gray-600">
+                  Latest Score: {googleBusinessScore.percentage}%
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -99,7 +164,7 @@ export default function Home() {
                     <span>Engagement tactics</span>
                   </li>
                 </ul>
-                <Link 
+                <Link
                   href="/instagram-audit" 
                   className="block w-full text-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-gradient-to-r from-[#E1306C] to-[#833AB4] hover:from-[#C72A5D] hover:to-[#6B2F94] transition-colors"
                 >

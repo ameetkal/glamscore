@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import type { Page } from 'puppeteer';
 import puppeteer from 'puppeteer';
 import sharp from 'sharp';
+import { GOOGLE_BUSINESS_SCORING_CRITERIA, ScoringResult } from '@/types/google-business';
 
 // Helper function to send progress updates
 function sendProgress(stage: string) {
@@ -324,196 +325,192 @@ function isValidGoogleMapsUrl(url: string): boolean {
   }
 }
 
+function createScoringResult(analysis: any): ScoringResult {
+  const scoreData: ScoringResult = {
+    totalPoints: 0,
+    maxPoints: 0,
+    percentage: 0,
+    details: {}
+  };
+
+  // Map analysis data to scoring criteria
+  const categoryMappings = {
+    "Profile Completeness": {
+      "Business name is clear and professional": Boolean(analysis.profile.businessName),
+      "Business category is accurately set": Boolean(analysis.profile.category),
+      "Business hours are listed and accurate": Boolean(analysis.information.hours),
+      "Business description is detailed and informative": Boolean(analysis.profile.description),
+      "Business location is accurate and verified": Boolean(analysis.information.address)
+    },
+    "Visual Content": {
+      "Profile photo is professional and high-quality": Boolean(analysis.photos.hasProfilePhoto),
+      "Cover photo is engaging and relevant": Boolean(analysis.photos.hasCoverPhoto),
+      "Business photos showcase services/products": Boolean(analysis.photos.hasInteriorPhotos || analysis.photos.hasExteriorPhotos),
+      "Photos are regularly updated": Boolean(analysis.photos.hasInteriorPhotos || analysis.photos.hasExteriorPhotos),
+      "Photo quality meets professional standards": Boolean(analysis.photos.hasProfilePhoto && analysis.photos.hasCoverPhoto)
+    },
+    "Reviews & Ratings": {
+      "Average rating is 4.0 or higher": analysis.reviews.averageRating >= 4.0,
+      "Owner responses to reviews are present": analysis.reviews.responseRate > 0,
+      "Response rate to reviews is high": analysis.reviews.responseRate >= 50,
+      "Review quality is high": analysis.reviews.totalReviews >= 20,
+      "Recent reviews are positive": analysis.reviews.averageRating >= 4.0
+    },
+    "Posts & Updates": {
+      "Regular posting schedule (2+ posts/month)": analysis.posts.postFrequency >= 2,
+      "Variety of post types (offers, events, updates)": analysis.posts.hasPosts,
+      "Posts receive good engagement": analysis.posts.postEngagement >= 5,
+      "Posts include clear calls-to-action": analysis.posts.hasPosts,
+      "Post visuals are high quality": analysis.posts.hasPosts
+    },
+    "Local SEO": {
+      "Keywords in business description": Boolean(analysis.profile.description),
+      "Local area keywords used": Boolean(analysis.profile.description),
+      "Service area is defined": Boolean(analysis.information.address),
+      "NAP (Name, Address, Phone) is consistent": Boolean(analysis.information.phone && analysis.information.address),
+      "Local citations are present": Boolean(analysis.information.website)
+    },
+    "Engagement & Interaction": {
+      "Quick response to messages": Boolean(analysis.information.phone),
+      "Answers questions promptly": Boolean(analysis.information.website),
+      "High user interaction rate": analysis.posts.postEngagement >= 5,
+      "Active post engagement": analysis.posts.postEngagement >= 5,
+      "Engages with review responses": analysis.reviews.responseRate >= 50
+    }
+  };
+
+  // Calculate scores for each category
+  Object.entries(categoryMappings).forEach(([category, items]) => {
+    const categoryScore = Object.values(items).filter(Boolean).length;
+    const maxScore = Object.keys(items).length;
+    
+    scoreData.details[category] = {
+      score: categoryScore,
+      maxScore,
+      items
+    };
+    
+    scoreData.totalPoints += categoryScore;
+    scoreData.maxPoints += maxScore;
+  });
+
+  scoreData.percentage = Math.round((scoreData.totalPoints / scoreData.maxPoints) * 100);
+  return scoreData;
+}
+
 export async function POST(request: NextRequest) {
   const encoder = new TextEncoder();
-  const stream = new TransformStream();
-  const writer = stream.writable.getWriter();
-
-  // Start processing in the background
-  (async () => {
-    try {
-      const formData = await request.formData();
-      let url = formData.get('url') as string;
-
-      if (!url) {
-        throw new Error('Please provide a Google Maps business URL');
-      }
-
-      // Clean and format the URL
-      url = url.trim();
-      // Remove @ symbol if present at the start
-      url = url.replace(/^@/, '');
-      if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        url = 'https://' + url;
-      }
-
-      console.log('Initial URL:', url); // Debug log
-
-      // Validate URL format
-      if (!isValidGoogleMapsUrl(url)) {
-        console.error('Invalid URL format:', url); // Debug log
-        throw new Error('Please provide a valid Google Maps URL (e.g., https://maps.app.goo.gl/..., https://www.google.com/maps/place/..., or https://g.co/kgs/...)');
-      }
-
-      let browser;
+  const stream = new ReadableStream({
+    async start(controller) {
       try {
-        // Send initial progress
-        await writer.write(sendProgress('initializing'));
+        const formData = await request.formData();
+        const url = formData.get('url') as string;
+        const screenshot = formData.get('screenshot') as File;
 
-        // Launch browser with additional settings for better redirect handling
-        browser = await puppeteer.launch({
-          headless: true,
-          args: [
-            '--no-sandbox',
-            '--disable-setuid-sandbox',
-            '--disable-web-security',
-            '--disable-features=IsolateOrigins,site-per-process'
-          ]
-        });
+        if (!url && !screenshot) {
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: 'error',
+            error: 'Either URL or screenshot is required'
+          }) + '\n'));
+          controller.close();
+          return;
+        }
 
-        const page = await browser.newPage();
-        
-        // Enable request interception to log redirects
-        await page.setRequestInterception(true);
-        
-        // Track all redirects
-        const redirects: string[] = [];
-        page.on('request', request => {
-          console.log('Request URL:', request.url());
-          redirects.push(request.url());
-          request.continue();
-        });
-        
-        page.on('response', response => {
-          console.log('Response URL:', response.url(), 'Status:', response.status());
-          if (response.status() >= 300 && response.status() < 400) {
-            console.log('Redirect Location:', response.headers()['location']);
-          }
-        });
+        let analysis;
+        try {
+          if (url) {
+            if (!isValidGoogleMapsUrl(url)) {
+              throw new Error('Please enter a valid Google Maps URL');
+            }
 
-        await page.setViewport({ width: 1280, height: 800 });
-
-        // Send loading progress
-        await writer.write(sendProgress('loading_profile'));
-        
-        // Handle all types of Google Maps URLs that need redirects
-        if (url.includes('g.co/kgs/') || url.includes('maps.app.goo.gl')) {
-          console.log('Processing shortened URL:', url);
-          
-          // Set a longer timeout for redirects
-          await page.setDefaultNavigationTimeout(30000);
-          
-          try {
-            // Navigate to the URL and wait for all redirects to complete
-            const response = await page.goto(url, {
-              waitUntil: 'networkidle0',
-              timeout: 30000
+            const browser = await puppeteer.launch({
+              headless: 'new',
+              args: ['--no-sandbox', '--disable-setuid-sandbox']
             });
 
-            if (!response) {
-              throw new Error('No response received from the URL');
-            }
+            const page = await browser.newPage();
+            await page.goto(url, { waitUntil: 'networkidle0' });
 
-            console.log('Redirect chain:', redirects); // Debug log
-            console.log('Final URL after redirects:', page.url());
-            
-            // Check if we ended up on a Google Maps business page
-            const finalUrl = page.url();
-            if (!finalUrl.includes('google.com/maps/place/') && !finalUrl.includes('maps.google.com/place/')) {
-              console.error('Redirect did not lead to a Google Maps business page. Final URL:', finalUrl);
-              console.error('Full redirect chain:', redirects);
-              throw new Error('The provided URL did not redirect to a valid Google Maps business page. Please make sure you copied the correct business URL from Google Maps.');
-            }
-          } catch (error) {
-            console.error('Navigation error:', error);
-            console.error('Redirect chain so far:', redirects);
-            throw new Error(`Failed to navigate to the business page: ${error instanceof Error ? error.message : 'Unknown error'}`);
+            // Send progress updates
+            controller.enqueue(sendProgress('loading_profile'));
+            await page.waitForSelector('h1.DUwDvf', { timeout: 10000 });
+
+            controller.enqueue(sendProgress('analyzing_profile'));
+            const profile = await analyzeProfile(page);
+
+            controller.enqueue(sendProgress('analyzing_visuals'));
+            const photos = await analyzePhotos(page);
+
+            controller.enqueue(sendProgress('analyzing_information'));
+            const information = await analyzeInformation(page);
+
+            controller.enqueue(sendProgress('analyzing_reviews'));
+            const reviews = await analyzeReviews(page);
+
+            controller.enqueue(sendProgress('analyzing_posts'));
+            const posts = await analyzePosts(page);
+
+            controller.enqueue(sendProgress('analyzing_services'));
+            const services = await analyzeServices(page);
+
+            await browser.close();
+
+            analysis = {
+              profile,
+              photos,
+              information,
+              reviews,
+              posts,
+              services
+            };
+          } else if (screenshot) {
+            // Handle screenshot analysis
+            const arrayBuffer = await screenshot.arrayBuffer();
+            const buffer = Buffer.from(arrayBuffer);
+            analysis = await analyzeScreenshot(buffer);
           }
-        } else {
-          // Navigate directly for google.com/maps URLs
-          await page.goto(url, { waitUntil: 'networkidle0' });
+        } catch (err) {
+          controller.enqueue(encoder.encode(JSON.stringify({
+            type: 'error',
+            error: err instanceof Error ? err.message : 'Failed to analyze Google Business Profile'
+          }) + '\n'));
+          controller.close();
+          return;
         }
 
-        // Wait for key elements to be present with a longer timeout
-        try {
-          await page.waitForSelector('h1', { timeout: 15000 });
-          console.log('Found business profile elements on page:', page.url());
-        } catch (error) {
-          console.error('Could not find business profile elements on page:', page.url());
-          console.error('Page content:', await page.content());
-          throw new Error('Could not find business profile. Please make sure the URL is correct and the business is listed on Google Maps.');
-        }
+        // Generate recommendations based on the analysis
+        const recommendations = generateRecommendations(analysis);
 
-        // Analyze different aspects of the profile
-        await writer.write(sendProgress('analyzing_profile'));
-        const profileAnalysis = await analyzeProfile(page);
-
-        await writer.write(sendProgress('analyzing_photos'));
-        const photosAnalysis = await analyzePhotos(page);
-
-        await writer.write(sendProgress('analyzing_information'));
-        const informationAnalysis = await analyzeInformation(page);
-
-        await writer.write(sendProgress('analyzing_reviews'));
-        const reviewsAnalysis = await analyzeReviews(page);
-
-        await writer.write(sendProgress('analyzing_posts'));
-        const postsAnalysis = await analyzePosts(page);
-
-        await writer.write(sendProgress('analyzing_services'));
-        const servicesAnalysis = await analyzeServices(page);
-
-        // Generate recommendations
-        await writer.write(sendProgress('generating_recommendations'));
-        const recommendations = generateRecommendations({
-          profile: profileAnalysis,
-          photos: photosAnalysis,
-          information: informationAnalysis,
-          reviews: reviewsAnalysis,
-          posts: postsAnalysis,
-          services: servicesAnalysis
-        });
-
-        // Send final result
         const result = {
           timestamp: new Date().toISOString(),
           recommendations,
-          gbpAnalysis: {
-            profile: profileAnalysis,
-            photos: photosAnalysis,
-            information: informationAnalysis,
-            reviews: reviewsAnalysis,
-            posts: postsAnalysis,
-            services: servicesAnalysis
-          }
+          googleBusinessAnalysis: analysis,
+          score: createScoringResult(analysis)
         };
 
-        await writer.write(sendResult(result));
-      } finally {
-        if (browser) {
-          await browser.close();
-        }
+        // Send the final result
+        controller.enqueue(encoder.encode(JSON.stringify({
+          type: 'result',
+          data: result
+        }) + '\n'));
+        controller.close();
+      } catch (error) {
+        console.error('Error processing Google Business audit request:', error);
+        const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
+        controller.enqueue(encoder.encode(JSON.stringify({
+          type: 'error',
+          error: errorMessage
+        }) + '\n'));
+        controller.close();
       }
-    } catch (error) {
-      console.error('Error in Google Business Profile analysis:', error);
-      await writer.write(
-        encoder.encode(
-          JSON.stringify({
-            type: 'error',
-            error: error instanceof Error ? error.message : 'An error occurred during analysis'
-          }) + '\n'
-        )
-      );
-    } finally {
-      await writer.close();
     }
-  })();
+  });
 
-  return new Response(stream.readable, {
+  return new Response(stream, {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive'
-    }
+      'Connection': 'keep-alive',
+    },
   });
 } 

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { GOOGLE_BUSINESS_SCORING_CRITERIA, ScoringResult } from '@/types/google-business';
 
 interface Recommendation {
   category: string;
@@ -12,101 +13,87 @@ interface Recommendation {
 }
 
 interface AuditMetrics {
-  profile: {
-    businessName: string;
-    category: string;
-    description: string;
+  profileCompleteness: {
+    businessName: boolean;
+    businessCategory: boolean;
+    businessHours: boolean;
+    businessDescription: boolean;
+    businessLocation: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  photos: {
+  visualContent: {
     profilePhoto: boolean;
     coverPhoto: boolean;
-    interiorPhotos: boolean;
-    exteriorPhotos: boolean;
+    businessPhotos: boolean;
+    photoUpdates: boolean;
+    photoQuality: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  information: {
-    hours: boolean;
-    phone: boolean;
-    website: boolean;
-    address: boolean;
+  reviewsRatings: {
+    averageRating: boolean;
+    reviewResponses: boolean;
+    responseRate: boolean;
+    reviewQuality: boolean;
+    reviewRecency: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  reviews: {
-    averageRating: number;
-    totalReviews: number;
-    responseRate: number;
+  postsUpdates: {
+    postFrequency: boolean;
+    postVariety: boolean;
+    postEngagement: boolean;
+    postCallToActions: boolean;
+    postVisualQuality: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  posts: {
-    hasPosts: boolean;
-    postFrequency: number;
-    postEngagement: number;
+  localSeo: {
+    keywordsInDescription: boolean;
+    localAreaKeywords: boolean;
+    serviceArea: boolean;
+    napConsistency: boolean;
+    localCitations: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
-  services: {
-    hasServices: boolean;
-    serviceCount: number;
-    hasPricing: boolean;
+  engagementInteraction: {
+    messageResponseRate: boolean;
+    questionResponseRate: boolean;
+    userInteraction: boolean;
+    postEngagement: boolean;
+    reviewInteraction: boolean;
     status: 'green' | 'yellow' | 'red';
+    score: number;
   };
+  overallScore: number;
 }
 
 interface Analysis {
   timestamp: string;
   recommendations: Recommendation[];
-  gbpAnalysis: AuditMetrics;
+  googleBusinessAnalysis: AuditMetrics;
 }
 
 type AnalysisStage = 
   | 'initializing'
   | 'loading_profile'
   | 'analyzing_profile'
-  | 'analyzing_photos'
-  | 'analyzing_information'
+  | 'analyzing_visuals'
   | 'analyzing_reviews'
   | 'analyzing_posts'
-  | 'analyzing_services'
+  | 'analyzing_seo'
+  | 'analyzing_engagement'
   | 'generating_recommendations'
   | 'complete';
 
 interface AnalysisProgress {
-  stage: AnalysisStage;
-  progress: number;
   message: string;
+  percentage: number;
 }
 
-interface ProgressData {
-  type: 'progress';
-  stage: AnalysisStage;
-}
-
-interface ResultData {
-  type: 'result';
-  data: Analysis;
-}
-
-interface ErrorData {
-  type: 'error';
-  error: string;
-}
-
-type ApiResponse = ProgressData | ResultData | ErrorData;
-
-function isValidGoogleMapsUrl(url: string): boolean {
-  try {
-    const urlObj = new URL(url);
-    // Accept all Google Maps URL formats
-    return (urlObj.hostname.match(/^(www\.)?google\.com$/) && urlObj.pathname.includes('/maps/place/')) ||
-           (urlObj.hostname === 'g.co' && urlObj.pathname.startsWith('/kgs/')) ||
-           (urlObj.hostname === 'maps.google.com' && urlObj.pathname.includes('/place/')) ||
-           (urlObj.hostname === 'maps.app.goo.gl');
-  } catch {
-    return false;
-  }
-}
-
-function formatGbpUrl(url: string): string {
+function formatUrl(url: string): string {
   url = url.trim();
   // Remove @ symbol if present at the start
   url = url.replace(/^@/, '');
@@ -121,39 +108,78 @@ function formatGbpUrl(url: string): string {
 
 export default function GoogleBusinessAudit() {
   const [url, setUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [progress, setProgress] = useState<AnalysisProgress>({
-    stage: 'initializing',
-    progress: 0,
-    message: 'Initializing analysis...'
-  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [progress, setProgress] = useState<AnalysisProgress>({ message: '', percentage: 0 });
+  const [result, setResult] = useState<any>(null);
+  const [score, setScore] = useState<ScoringResult | null>(null);
+  const [editableScore, setEditableScore] = useState<ScoringResult | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
-  const progressMessages: Record<AnalysisStage, string> = {
-    initializing: 'Initializing analysis...',
-    loading_profile: 'Loading Google Business Profile...',
-    analyzing_profile: 'Analyzing profile information...',
-    analyzing_photos: 'Checking photos and media...',
-    analyzing_information: 'Verifying business information...',
-    analyzing_reviews: 'Analyzing reviews and ratings...',
-    analyzing_posts: 'Evaluating posts and updates...',
-    analyzing_services: 'Checking services and offerings...',
-    generating_recommendations: 'Generating recommendations...',
-    complete: 'Analysis complete!'
-  };
+  // Add ProgressBar component inside GoogleBusinessAudit to access progress state
+  const ProgressBar = () => (
+    <div className="w-full space-y-2">
+      <div className="flex justify-between text-sm text-gray-600">
+        <span>{progress.message}</span>
+        <span>{progress.percentage}%</span>
+      </div>
+      <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
+        <div
+          className="h-full transition-all duration-300 ease-in-out"
+          style={{ width: `${progress.percentage}%`, backgroundColor: '#1C6B62' }}
+        />
+      </div>
+    </div>
+  );
 
-  const progressPercentages: Record<AnalysisStage, number> = {
-    initializing: 0,
-    loading_profile: 10,
-    analyzing_profile: 20,
-    analyzing_photos: 30,
-    analyzing_information: 40,
-    analyzing_reviews: 50,
-    analyzing_posts: 60,
-    analyzing_services: 70,
-    generating_recommendations: 90,
-    complete: 100
+  // Load saved state on component mount
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('googleBusinessAuditAnalysis');
+    const savedScore = localStorage.getItem('googleBusinessAuditScore');
+    const savedUrl = localStorage.getItem('googleBusinessAuditUrl');
+    
+    if (savedAnalysis && savedScore) {
+      try {
+        setResult(JSON.parse(savedAnalysis));
+        setScore(JSON.parse(savedScore));
+        if (savedUrl) {
+          setUrl(savedUrl);
+        }
+      } catch (e) {
+        console.error('Error loading saved state:', e);
+        // Clear invalid saved state
+        localStorage.removeItem('googleBusinessAuditAnalysis');
+        localStorage.removeItem('googleBusinessAuditScore');
+        localStorage.removeItem('googleBusinessAuditUrl');
+      }
+    }
+  }, []);
+
+  // Save state when it changes
+  useEffect(() => {
+    if (result && score) {
+      localStorage.setItem('googleBusinessAuditAnalysis', JSON.stringify(result));
+      localStorage.setItem('googleBusinessAuditScore', JSON.stringify(score));
+      if (url) {
+        localStorage.setItem('googleBusinessAuditUrl', url);
+      }
+    }
+  }, [result, score, url]);
+
+  useEffect(() => {
+    if (score) {
+      setEditableScore(score);
+    }
+  }, [score]);
+
+  // Function to clear saved state
+  const clearSavedState = () => {
+    localStorage.removeItem('googleBusinessAuditAnalysis');
+    localStorage.removeItem('googleBusinessAuditScore');
+    localStorage.removeItem('googleBusinessAuditUrl');
+    setResult(null);
+    setScore(null);
+    setUrl('');
   };
 
   const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,260 +188,259 @@ export default function GoogleBusinessAudit() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
-    setAnalysis(null);
-    setProgress({
-      stage: 'initializing',
-      progress: 0,
-      message: progressMessages.initializing
-    });
-    
-    if (!url) {
-      setError('Please provide your Google Maps business URL');
-      return;
-    }
+    setLoading(true);
+    setError(null);
+    setProgress({ message: 'Starting analysis...', percentage: 0 });
+    setResult(null);
+    setScore(null);
 
-    try {
-      const formattedUrl = formatGbpUrl(url);
-      if (!isValidGoogleMapsUrl(formattedUrl)) {
-        throw new Error('Please provide a valid Google Maps business URL');
-      }
-      setUrl(formattedUrl);
-    } catch (err) {
-      setError('Please enter a valid Google Maps business URL (e.g., https://maps.app.goo.gl/..., https://www.google.com/maps/place/..., or https://g.co/kgs/...)');
-      return;
-    }
-    
-    setIsLoading(true);
-    
     try {
       const formData = new FormData();
       formData.append('url', url);
 
-      console.log('Starting analysis for URL:', url); // Debug log
-
       const response = await fetch('/api/google-business-audit', {
         method: 'POST',
-        body: formData,
+        body: formData
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error('API Error:', errorData); // Debug log
-        throw new Error(errorData.error || 'Failed to analyze Google Business Profile');
+        throw new Error('Failed to analyze Google Business Profile');
       }
 
-      if (!response.body) {
-        throw new Error('No response stream available');
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to read response');
       }
-
-      const reader = response.body.getReader();
-      let buffer = '';
 
       while (true) {
         const { done, value } = await reader.read();
-        
-        if (done) {
-          console.log('Stream complete, processing final buffer'); // Debug log
-          if (buffer.trim()) {
-            try {
-              const data = JSON.parse(buffer) as ApiResponse;
-              console.log('Final data:', data); // Debug log
-              if (data.type === 'result') {
-                setAnalysis(data.data);
-                setProgress({
-                  stage: 'complete',
-                  progress: 100,
-                  message: progressMessages.complete
-                });
-              } else if (data.type === 'error') {
-                throw new Error(data.error);
-              }
-            } catch (e) {
-              console.error('Error parsing final buffer:', e, 'Buffer:', buffer); // Debug log
-              throw new Error('Failed to process analysis results');
+        if (done) break;
+
+        const text = new TextDecoder().decode(value);
+        const lines = text.split('\n').filter(Boolean);
+
+        for (const line of lines) {
+          try {
+            const data = JSON.parse(line);
+            if (data.type === 'progress') {
+              // Map the stage to a message and percentage
+              const stageMessages: Record<string, { message: string; percentage: number }> = {
+                'loading_profile': { message: 'Loading profile...', percentage: 10 },
+                'analyzing_profile': { message: 'Analyzing profile information...', percentage: 20 },
+                'analyzing_visuals': { message: 'Analyzing visual content...', percentage: 40 },
+                'analyzing_information': { message: 'Analyzing business information...', percentage: 60 },
+                'analyzing_reviews': { message: 'Analyzing reviews and ratings...', percentage: 70 },
+                'analyzing_posts': { message: 'Analyzing posts and updates...', percentage: 80 },
+                'analyzing_services': { message: 'Analyzing services...', percentage: 90 }
+              };
+              const progress = stageMessages[data.stage] || { message: data.stage, percentage: 0 };
+              setProgress(progress);
+            } else if (data.type === 'error') {
+              throw new Error(data.error);
+            } else if (data.type === 'result') {
+              setResult(data.data);
+              setScore(data.data.score);
+              // Save score to localStorage
+              localStorage.setItem('googleBusinessAuditScore', JSON.stringify(data.data.score));
             }
-          }
-          break;
-        }
-
-        const chunk = new TextDecoder().decode(value);
-        buffer += chunk;
-        console.log('Received chunk:', chunk); // Debug log
-
-        // Process complete JSON objects in the buffer
-        let newlineIndex;
-        while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
-          const line = buffer.slice(0, newlineIndex);
-          buffer = buffer.slice(newlineIndex + 1);
-
-          if (line.trim()) {
-            try {
-              const data = JSON.parse(line) as ApiResponse;
-              console.log('Parsed data:', data); // Debug log
-              
-              if (data.type === 'progress') {
-                console.log('Updating progress:', data.stage); // Debug log
-                setProgress({
-                  stage: data.stage,
-                  progress: progressPercentages[data.stage],
-                  message: progressMessages[data.stage]
-                });
-              } else if (data.type === 'error') {
-                throw new Error(data.error);
-              } else if (data.type === 'result') {
-                console.log('Received result data'); // Debug log
-                setAnalysis(data.data);
-                setProgress({
-                  stage: 'complete',
-                  progress: 100,
-                  message: progressMessages.complete
-                });
-              }
-            } catch (e) {
-              console.error('Error parsing line:', e, 'Line:', line); // Debug log
-              if (line.includes('error')) {
-                throw new Error(line);
-              }
-            }
+          } catch (e) {
+            console.error('Error parsing line:', line, e);
           }
         }
       }
     } catch (err) {
-      console.error('Analysis error:', err); // Debug log
-      setError(err instanceof Error ? err.message : 'An error occurred during analysis');
-      setProgress({
-        stage: 'initializing',
-        progress: 0,
-        message: 'Analysis failed'
-      });
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  const ProgressBar = () => (
-    <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-      <div 
-        className="h-2.5 rounded-full transition-all duration-500"
-        style={{ width: `${progress.progress}%`, backgroundColor: '#1C6B62' }}
-      ></div>
-    </div>
-  );
+  // Function to recalculate score when criteria are toggled
+  const recalculateScore = (category: string, item: string, completed: boolean) => {
+    if (!editableScore) return;
+
+    const newDetails = { ...editableScore.details };
+    newDetails[category].items[item] = completed;
+    
+    // Recalculate category score
+    const categoryItems = newDetails[category].items;
+    const categoryScore = Object.values(categoryItems).filter(Boolean).length;
+    newDetails[category].score = categoryScore;
+
+    // Recalculate total score
+    const totalPoints = Object.values(newDetails).reduce((sum, cat) => sum + cat.score, 0);
+    const maxPoints = Object.values(newDetails).reduce((sum, cat) => sum + cat.maxScore, 0);
+
+    setEditableScore({
+      totalPoints,
+      maxPoints,
+      percentage: Math.round((totalPoints / maxPoints) * 100),
+      details: newDetails
+    });
+  };
 
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-16">
-        <div className="max-w-3xl mx-auto">
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-gray-900 mb-4">
-              Google Business Profile Audit
-            </h1>
-            <p className="text-xl text-gray-600">
-              Get personalized recommendations to improve your Google Business Profile
-            </p>
-            <div className="mt-4 space-x-4">
-              <Link 
-                href="/instagram-audit" 
-                className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
-              >
-                Switch to Instagram Profile Audit →
-              </Link>
-              <Link 
-                href="/website-audit" 
-                className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
-              >
-                Switch to Website Audit →
-              </Link>
+        <div className="text-center mb-16">
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Google Business Profile Audit
+          </h1>
+          <p className="text-xl text-gray-600 flex items-center justify-center gap-2">
+            Get personalized recommendations to improve your Google Business Profile
+            <Link href="/google-business-scoring" className="group relative ml-2" aria-label="Learn more about scoring criteria">
+              <svg className="w-6 h-6 text-[#4285F4] hover:text-[#3367D6] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-sm text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                Learn more about scoring criteria
+              </span>
+            </Link>
+          </p>
+          <div className="mt-4 space-x-4">
+            <Link 
+              href="/instagram-audit" 
+              className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
+            >
+              Switch to Instagram Profile Audit →
+            </Link>
+            <Link 
+              href="/website-audit" 
+              className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
+            >
+              Switch to Website Audit →
+            </Link>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+              How to Find Your Google Business Profile URL
+            </h2>
+            <div className="bg-gray-50 rounded-lg p-6 space-y-4">
+              <ol className="list-decimal list-inside space-y-2 text-gray-700">
+                <li>Go to Google Maps</li>
+                <li>Search for your business name</li>
+                <li>Click on your business listing</li>
+                <li>Copy the URL from your browser&apos;s address bar</li>
+              </ol>
+              <p className="text-sm text-gray-500 mt-4">
+                Note: The URL should look something like: https://www.google.com/maps/place/Your+Business+Name
+              </p>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
-            <div className="mb-8">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-4">
-                How to Find Your Google Maps URL
-              </h2>
-              <div className="bg-gray-50 rounded-lg p-6 space-y-4">
-                <ol className="list-decimal list-inside space-y-2 text-gray-700">
-                  <li>Go to <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer" className="text-[#1C6B62] hover:underline">Google Maps</a></li>
-                  <li>Search for your business name</li>
-                  <li>Click on your business listing</li>
-                  <li>Click the "Share" button</li>
-                  <li>Click "Copy link" to get your business URL</li>
-                </ol>
-                <p className="text-sm text-gray-500 mt-4">
-                  Note: Make sure you&apos;re copying the URL from your business&apos;s Google Maps listing.
-                  The URL should look something like: https://maps.app.goo.gl/... or https://www.google.com/maps/place/Your+Business+Name
-                </p>
-              </div>
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div>
+              <label htmlFor="google-business-url" className="block text-sm font-medium text-gray-700 mb-2">
+                Google Business Profile URL
+              </label>
+              <input
+                type="text"
+                id="google-business-url"
+                name="url"
+                value={url}
+                onChange={handleUrlChange}
+                placeholder="https://www.google.com/maps/place/Your+Business+Name"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#1C6B62] focus:border-[#1C6B62]"
+                disabled={loading}
+              />
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div>
-                <label htmlFor="gbp-url" className="block text-sm font-medium text-gray-700 mb-2">
-                  Google Maps Business URL
-                </label>
-                <input
-                  type="text"
-                  id="gbp-url"
-                  value={url}
-                  onChange={handleUrlChange}
-                  placeholder="https://www.google.com/maps/place/your-business"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#1C6B62] focus:border-[#1C6B62]"
-                  disabled={isLoading}
-                />
-              </div>
-
-              {error && (
-                <div className="text-red-600 text-sm">{error}</div>
-              )}
-
-              <button
-                type="submit"
-                disabled={isLoading}
-                className="w-full px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1C6B62] disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? 'Analyzing...' : 'Start Analysis'}
-              </button>
-            </form>
-
-            {isLoading && (
-              <div className="mt-8">
-                <ProgressBar />
-                <p className="text-center text-gray-600">{progress.message}</p>
-              </div>
+            {error && (
+              <div className="text-red-600 text-sm">{error}</div>
             )}
-          </div>
 
-          {analysis && (
-            <div className="max-w-2xl mx-auto mt-8 sm:mt-12 bg-white rounded-xl shadow-lg p-4 sm:p-8">
-              <h2 className="text-2xl font-semibold text-gray-900 mb-6">
-                Analysis Results
-              </h2>
-              
-              <div className="space-y-8">
-                {analysis.recommendations.map((rec, index) => (
-                  <div key={index} className="border border-gray-200 rounded-lg p-6">
-                    <h3 className="text-xl font-semibold text-gray-900 mb-4">
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1C6B62] disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {loading ? 'Analyzing...' : 'Start Analysis'}
+            </button>
+          </form>
+
+          {loading && (
+            <div className="mt-8">
+              <ProgressBar />
+              <p className="text-center text-gray-600">{progress.message}</p>
+            </div>
+          )}
+        </div>
+
+        {result && editableScore && (
+          <div id="results" className="max-w-2xl mx-auto mt-8 sm:mt-12 bg-white rounded-xl shadow-lg p-4 sm:p-8">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+              Analysis Results
+            </h2>
+            
+            <div className="text-center mb-8">
+              <h3 className="text-3xl font-bold text-gray-900 mb-2">
+                Your Google Business Profile Score
+              </h3>
+              <div className="text-5xl font-bold text-[#4285F4]">
+                {editableScore.percentage}%
+              </div>
+              <p className="text-gray-600 mt-2">
+                {editableScore.totalPoints} out of {editableScore.maxPoints} points
+              </p>
+            </div>
+
+            <div className="space-y-8">
+              {Object.entries(editableScore.details).map(([category, data]) => (
+                <div key={category} className="border-b border-gray-200 pb-6 last:border-0">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                    {category}
+                  </h3>
+                  <div className="space-y-4">
+                    {Object.entries(data.items).map(([item, completed]) => (
+                      <div key={item} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={completed}
+                          onChange={(e) => recalculateScore(category, item, e.target.checked)}
+                          className="h-5 w-5 text-[#4285F4] border-gray-300 rounded focus:ring-[#4285F4]"
+                        />
+                        <label className="ml-3 text-gray-700">
+                          {item}
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                Recommendations
+              </h3>
+              <div className="space-y-6">
+                {result.recommendations.map((rec: Recommendation, index: number) => (
+                  <div key={index} className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-2">
                       {rec.category}
-                    </h3>
-                    
+                    </h4>
                     {rec.strengths.length > 0 && (
-                      <div className="mb-4">
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Strengths:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-green-600">
-                          {rec.strengths.map((strength, i) => (
+                      <div className="mb-3">
+                        <h5 className="text-sm font-medium text-gray-700 mb-1">
+                          Strengths:
+                        </h5>
+                        <ul className="list-disc list-inside text-sm text-gray-600">
+                          {rec.strengths.map((strength: string, i: number) => (
                             <li key={i}>{strength}</li>
                           ))}
                         </ul>
                       </div>
                     )}
-
                     {rec.suggestions.length > 0 && (
                       <div>
-                        <h4 className="text-sm font-medium text-gray-700 mb-2">Recommendations:</h4>
-                        <ul className="list-disc list-inside space-y-1 text-gray-600">
-                          {rec.suggestions.map((suggestion, i) => (
+                        <h5 className="text-sm font-medium text-gray-700 mb-1">
+                          Suggestions:
+                        </h5>
+                        <ul className="list-disc list-inside text-sm text-gray-600">
+                          {rec.suggestions.map((suggestion: string, i: number) => (
                             <li key={i}>{suggestion}</li>
                           ))}
                         </ul>
@@ -425,20 +450,20 @@ export default function GoogleBusinessAudit() {
                 ))}
               </div>
             </div>
-          )}
 
-          <div className="mt-8 text-center">
-            <Link
-              href="/"
-              className="text-[#1C6B62] hover:text-[#15554D] font-medium"
-            >
-              ← Back to Home
-            </Link>
+            <div className="mt-8 text-center">
+              <Link
+                href="/"
+                className="text-[#1C6B62] hover:text-[#15554D] transition-colors"
+              >
+                ← Back to Home
+              </Link>
+            </div>
           </div>
+        )}
 
-          <div className="mt-8 text-center text-gray-600">
-            <p>Powered by <a href="https://glammatic.com" className="text-[#1C6B62] hover:underline" target="_blank" rel="noopener noreferrer">Glammatic.com</a></p>
-          </div>
+        <div className="mt-8 text-center text-gray-600">
+          <p>Powered by <a href="https://glammatic.com" className="text-[#1C6B62] hover:underline" target="_blank" rel="noopener noreferrer">Glammatic.com</a></p>
         </div>
       </div>
     </main>

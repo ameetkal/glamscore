@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
+import { WEBSITE_SCORING_CRITERIA, ScoringResult } from '@/types/website';
 
 interface Recommendation {
   category: string;
@@ -91,9 +92,9 @@ type AnalysisStage =
   | 'complete';
 
 interface AnalysisProgress {
-  stage: AnalysisStage;
-  progress: number;
+  stage: string;
   message: string;
+  percentage: number;
 }
 
 interface ScoringCriteria {
@@ -199,297 +200,218 @@ const scoringSystem: Record<keyof Omit<AuditMetrics, 'overallScore'>, ScoringCri
           yellow: 60, // 60-89% images have alt text
           red: 60 // Less than 60% images have alt text
         },
-        description: 'Image alt text coverage'
+        description: 'Alt text coverage for images'
       }
     }
   },
   contentCompleteness: {
-    maxPoints: 25,
+    maxPoints: 20,
     criteria: {
       servicesListed: {
-        weight: 8,
+        weight: 4,
         thresholds: {
-          green: 1, // All services listed with details
-          yellow: 0.5, // Basic service list
-          red: 0 // Missing or incomplete service list
+          green: 1, // Services are listed and described
+          yellow: 0.5, // Services are listed but not described
+          red: 0 // Services are not listed
         },
-        description: 'Service listing completeness'
+        description: 'Services are listed and described'
       },
       imageQuality: {
-        weight: 5,
+        weight: 4,
         thresholds: {
-          green: 8, // 8-10/10 image quality
-          yellow: 5, // 5-7/10 image quality
-          red: 5 // Less than 5/10 image quality
+          green: 1, // High-quality images
+          yellow: 0.5, // Acceptable image quality
+          red: 0 // Poor image quality
         },
-        description: 'Image quality score'
+        description: 'Image quality'
       },
       staffBios: {
         weight: 4,
         thresholds: {
-          green: 1, // Complete staff profiles
-          yellow: 0.5, // Basic staff information
-          red: 0 // Missing staff information
+          green: 1, // Staff bios are present
+          yellow: 0.5, // Partial staff bios
+          red: 0 // No staff bios
         },
-        description: 'Staff bio completeness'
+        description: 'Staff bios'
       },
       testimonials: {
         weight: 4,
         thresholds: {
-          green: 1, // Multiple verified testimonials
-          yellow: 0.5, // Basic testimonials
+          green: 1, // Testimonials are included
+          yellow: 0.5, // Partial testimonials
           red: 0 // No testimonials
         },
-        description: 'Testimonial presence and quality'
+        description: 'Testimonials'
       },
       blog: {
         weight: 4,
         thresholds: {
-          green: 1, // Active blog with quality content
-          yellow: 0.5, // Basic blog presence
-          red: 0 // No blog
+          green: 1, // Blog or news section is present
+          yellow: 0.5, // Partial blog or news section
+          red: 0 // No blog or news section
         },
-        description: 'Blog content quality and activity'
+        description: 'Blog or news section'
       }
     }
   },
   brandingConsistency: {
-    maxPoints: 10,
+    maxPoints: 20,
     criteria: {
       logo: {
-        weight: 3,
+        weight: 5,
         thresholds: {
-          green: 1, // Professional logo used consistently
-          yellow: 0.5, // Basic logo usage
-          red: 0 // No logo or inconsistent usage
+          green: 1, // Logo is present and consistent
+          yellow: 0.5, // Logo is present but inconsistent
+          red: 0 // No logo
         },
         description: 'Logo presence and consistency'
       },
       colorUsage: {
-        weight: 2,
+        weight: 5,
         thresholds: {
-          green: 1, // Consistent brand colors
-          yellow: 0.5, // Some color consistency
+          green: 1, // Color usage is consistent
+          yellow: 0.5, // Partial color consistency
           red: 0 // Inconsistent color usage
         },
-        description: 'Brand color consistency'
+        description: 'Color usage consistency'
       },
       typography: {
-        weight: 2,
+        weight: 5,
         thresholds: {
-          green: 1, // Consistent typography
-          yellow: 0.5, // Basic typography consistency
+          green: 1, // Typography is consistent
+          yellow: 0.5, // Partial typography consistency
           red: 0 // Inconsistent typography
         },
         description: 'Typography consistency'
       },
       consistentTone: {
-        weight: 3,
+        weight: 5,
         thresholds: {
-          green: 1, // Consistent brand voice
-          yellow: 0.5, // Some tone consistency
-          red: 0 // Inconsistent tone
+          green: 1, // Tone of voice is consistent
+          yellow: 0.5, // Partial tone consistency
+          red: 0 // Inconsistent tone of voice
         },
-        description: 'Brand voice consistency'
+        description: 'Tone of voice consistency'
       }
     }
   },
   socialContactIntegration: {
-    maxPoints: 10,
+    maxPoints: 15,
     criteria: {
       socialMediaLinks: {
-        weight: 4,
+        weight: 5,
         thresholds: {
-          green: 1, // All social media linked
-          yellow: 0.5, // Some social media linked
+          green: 1, // Social media links are present
+          yellow: 0.5, // Partial social media links
           red: 0 // No social media links
         },
-        description: 'Social media integration'
+        description: 'Social media links'
       },
       contactForm: {
-        weight: 3,
+        weight: 5,
         thresholds: {
-          green: 1, // Professional contact form
-          yellow: 0.5, // Basic contact form
+          green: 1, // Contact form is functional
+          yellow: 0.5, // Partial contact form
           red: 0 // No contact form
         },
-        description: 'Contact form quality'
+        description: 'Contact form'
       },
       bookingIntegration: {
-        weight: 3,
+        weight: 5,
         thresholds: {
-          green: 1, // Integrated booking system
-          yellow: 0.5, // Basic booking option
-          red: 0 // No booking option
+          green: 1, // Booking integration is present
+          yellow: 0.5, // Partial booking integration
+          red: 0 // No booking integration
         },
-        description: 'Booking system integration'
+        description: 'Booking integration'
       }
     }
   },
   securityAccessibility: {
-    maxPoints: 5,
+    maxPoints: 20,
     criteria: {
       https: {
-        weight: 1,
+        weight: 5,
         thresholds: {
-          green: 1, // HTTPS enabled
-          yellow: 0, // No HTTPS
+          green: 1, // HTTPS is enabled
+          yellow: 0.5, // Partial HTTPS
           red: 0 // No HTTPS
         },
-        description: 'HTTPS implementation'
+        description: 'HTTPS'
       },
       ariaTags: {
-        weight: 1,
+        weight: 5,
         thresholds: {
-          green: 1, // ARIA tags implemented
-          yellow: 0.5, // Some ARIA tags
+          green: 1, // ARIA tags are used
+          yellow: 0.5, // Partial ARIA tags
           red: 0 // No ARIA tags
         },
-        description: 'ARIA tag implementation'
+        description: 'ARIA tags'
       },
       altText: {
-        weight: 1,
+        weight: 5,
         thresholds: {
-          green: 1, // All images have alt text
-          yellow: 0.5, // Some images have alt text
+          green: 1, // Alt text is present for images
+          yellow: 0.5, // Partial alt text
           red: 0 // No alt text
         },
-        description: 'Image alt text implementation'
+        description: 'Alt text'
       },
       contrastCompliance: {
-        weight: 2,
+        weight: 5,
         thresholds: {
-          green: 1, // WCAG compliant
-          yellow: 0.5, // Partially compliant
-          red: 0 // Not compliant
+          green: 1, // Contrast compliance is met
+          yellow: 0.5, // Partial contrast compliance
+          red: 0 // No contrast compliance
         },
-        description: 'Color contrast compliance'
+        description: 'Contrast compliance'
       }
     }
   }
 };
 
-// Helper function to calculate category score
 function calculateCategoryScore(category: keyof typeof scoringSystem, metrics: any): number {
-  if (!metrics) return 0;
-  
   const criteria = scoringSystem[category].criteria;
-  let totalScore = 0;
-  let maxPossibleScore = 0;
-
-  Object.entries(criteria).forEach(([key, criterion]) => {
-    // Skip if the metric doesn't exist in the data
-    if (!(key in metrics)) {
-      maxPossibleScore += criterion.weight;
-      return;
+  let score = 0;
+  for (const [key, value] of Object.entries(criteria)) {
+    const metricValue = metrics[key];
+    if (metricValue >= value.thresholds.green) {
+      score += value.weight;
+    } else if (metricValue >= value.thresholds.yellow) {
+      score += value.weight * 0.5;
     }
-
-    const value = metrics[key];
-    let score = 0;
-
-    try {
-      if (typeof value === 'boolean') {
-        score = value ? criterion.weight : 0;
-      } else if (typeof value === 'number') {
-        if (key === 'coreWebVitals') {
-          // Special handling for core web vitals
-          const vitals = metrics.coreWebVitals as unknown as CoreWebVitals;
-          if (vitals && typeof vitals === 'object') {
-            const lcpScore = (vitals.lcp ?? 0) <= 2.5 ? 1 : (vitals.lcp ?? 0) <= 4 ? 0.5 : 0;
-            const fidScore = (vitals.fid ?? 0) <= 100 ? 1 : (vitals.fid ?? 0) <= 300 ? 0.5 : 0;
-            const clsScore = (vitals.cls ?? 0) <= 0.1 ? 1 : (vitals.cls ?? 0) <= 0.25 ? 0.5 : 0;
-            score = ((lcpScore + fidScore + clsScore) / 3) * criterion.weight;
-          }
-        } else {
-          // For other numeric values
-          const numValue = value ?? 0;
-          if (numValue >= criterion.thresholds.green) {
-            score = criterion.weight;
-          } else if (numValue >= criterion.thresholds.yellow) {
-            score = criterion.weight * 0.5;
-          } else {
-            score = 0;
-          }
-        }
-      }
-
-      totalScore += score;
-      maxPossibleScore += criterion.weight;
-    } catch (error) {
-      console.error(`Error calculating score for ${category}.${key}:`, error);
-      maxPossibleScore += criterion.weight;
-    }
-  });
-
-  return maxPossibleScore > 0 ? (totalScore / maxPossibleScore) * scoringSystem[category].maxPoints : 0;
+  }
+  return score;
 }
 
-// Helper function to calculate overall score
 function calculateOverallScore(metrics: AuditMetrics | null | undefined): number {
   if (!metrics) return 0;
-
-  const categories = Object.keys(scoringSystem) as Array<keyof typeof scoringSystem>;
   let totalScore = 0;
-
-  categories.forEach(category => {
-    try {
-      const categoryMetrics = metrics[category];
-      if (categoryMetrics) {
-        totalScore += calculateCategoryScore(category, categoryMetrics);
-      }
-    } catch (error) {
-      console.error(`Error calculating score for category ${category}:`, error);
-    }
-  });
-
-  return Math.round(totalScore);
+  let maxScore = 0;
+  for (const [category, criteria] of Object.entries(scoringSystem)) {
+    const categoryScore = calculateCategoryScore(category as keyof typeof scoringSystem, metrics[category as keyof AuditMetrics]);
+    totalScore += categoryScore;
+    maxScore += criteria.maxPoints;
+  }
+  return Math.round((totalScore / maxScore) * 100);
 }
 
 function formatUrl(url: string): string {
-  // Remove any whitespace
   url = url.trim();
+  // Remove @ symbol if present at the start
+  url = url.replace(/^@/, '');
   
   // If it's a naked domain (no protocol), add https://
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
     url = 'https://' + url;
   }
   
-  // If it's a naked domain without www, add www.
-  if (!url.includes('://www.') && !url.includes('://localhost')) {
-    url = url.replace('://', '://www.');
-  }
-  
   return url;
 }
 
-export default function WebsiteAudit() {
-  const [url, setUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [analysis, setAnalysis] = useState<Analysis | null>(null);
-  const [progress, setProgress] = useState<AnalysisProgress>({
-    stage: 'initializing',
-    progress: 0,
-    message: 'Initializing analysis...'
-  });
-
-  // Add progress messages for each stage
-  const progressMessages: Record<AnalysisStage, string> = {
-    initializing: 'Initializing analysis...',
-    loading_website: 'Loading website...',
-    analyzing_seo: 'Analyzing SEO elements...',
-    analyzing_performance: 'Checking performance metrics...',
-    analyzing_mobile: 'Testing mobile responsiveness...',
-    analyzing_branding: 'Evaluating branding consistency...',
-    analyzing_social: 'Checking social media integration...',
-    analyzing_contact: 'Verifying contact information...',
-    analyzing_accessibility: 'Testing accessibility features...',
-    generating_recommendations: 'Generating recommendations...',
-    complete: 'Analysis complete!'
-  };
-
-  // Add progress percentages for each stage
-  const progressPercentages: Record<AnalysisStage, number> = {
+// Helper functions for progress updates
+const getProgressPercentage = (stage: string): number => {
+  const stages: Record<string, number> = {
     initializing: 0,
     loading_website: 10,
     analyzing_seo: 20,
@@ -502,163 +424,231 @@ export default function WebsiteAudit() {
     generating_recommendations: 90,
     complete: 100
   };
+  return stages[stage] || 0;
+};
 
-  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setUrl(e.target.value);
+const getProgressMessage = (stage: string): string => {
+  const messages: Record<string, string> = {
+    initializing: 'Initializing analysis...',
+    loading_website: 'Loading website...',
+    analyzing_seo: 'Analyzing SEO elements...',
+    analyzing_performance: 'Checking performance...',
+    analyzing_mobile: 'Evaluating mobile experience...',
+    analyzing_branding: 'Analyzing branding...',
+    analyzing_social: 'Checking social media integration...',
+    analyzing_contact: 'Verifying contact information...',
+    analyzing_accessibility: 'Testing accessibility...',
+    generating_recommendations: 'Generating recommendations...',
+    complete: 'Analysis complete!'
   };
+  return messages[stage] || 'Processing...';
+};
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
-    setAnalysis(null);
-    setProgress({
-      stage: 'initializing',
-      progress: 0,
-      message: progressMessages.initializing
-    });
-    
-    if (!url) {
-      setError('Please provide your website URL');
-      return;
-    }
+export default function WebsiteAudit() {
+  const [url, setUrl] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [analysis, setAnalysis] = useState<Analysis | null>(null);
+  const [progress, setProgress] = useState<AnalysisProgress>({
+    stage: 'initializing',
+    message: 'Initializing analysis...',
+    percentage: 0
+  });
+  const [editableScore, setEditableScore] = useState<ScoringResult | null>(null);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
-    try {
-      const formattedUrl = formatUrl(url);
-      new URL(formattedUrl);
-      setUrl(formattedUrl);
-    } catch (err) {
-      setError('Please enter a valid website URL (e.g., example.com or www.example.com)');
-      return;
-    }
-    
-    setIsLoading(true);
-    
-    try {
-      const formData = new FormData();
-      formData.append('url', url);
-
-      const response = await fetch('/api/website-audit', {
-        method: 'POST',
-        body: formData,
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to analyze website');
-      }
-
-      // Create a reader for the response stream
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('Failed to start analysis');
-
-      let buffer = ''; // Buffer to store partial chunks
-
-      // Read the stream
-      while (true) {
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          // Process any remaining data in the buffer
-          if (buffer.trim()) {
-            try {
-              const data = JSON.parse(buffer);
-              if (data.type === 'result') {
-                setAnalysis(data.data);
-                setProgress({
-                  stage: 'complete',
-                  progress: 100,
-                  message: progressMessages.complete
-                });
-              }
-            } catch (e) {
-              console.error('Error parsing final buffer:', e);
-            }
-          }
-          break;
-        }
-
-        // Convert the chunk to text and add to buffer
-        const chunk = new TextDecoder().decode(value);
-        buffer += chunk;
-
-        // Process complete JSON objects in the buffer
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep the last partial line in the buffer
-
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          
-          try {
-            const data = JSON.parse(line);
-            console.log('Received data:', data); // Debug log
-
-            if (data.type === 'progress' && typeof data.stage === 'string') {
-              const stage = data.stage as AnalysisStage;
-              if (stage in progressPercentages) {
-                console.log('Updating progress:', stage); // Debug log
-                setProgress({
-                  stage,
-                  progress: progressPercentages[stage],
-                  message: progressMessages[stage]
-                });
-              }
-            } else if (data.type === 'result') {
-              console.log('Received final result'); // Debug log
-              setAnalysis(data.data);
-              setProgress({
-                stage: 'complete',
-                progress: 100,
-                message: progressMessages.complete
-              });
-            } else if (data.type === 'error') {
-              throw new Error(data.error || 'Analysis failed');
-            }
-          } catch (e) {
-            console.error('Error parsing JSON:', e, 'Line:', line); // Debug log
-            if (line.includes('error')) {
-              throw new Error(line);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Analysis error:', err); // Debug log
-      setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
-      setProgress({
-        stage: 'initializing',
-        progress: 0,
-        message: 'Analysis failed'
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  // Add progress bar component
+  // Add ProgressBar component inside WebsiteAudit to access progress state
   const ProgressBar = () => (
     <div className="w-full space-y-2">
       <div className="flex justify-between text-sm text-gray-600">
         <span>{progress.message}</span>
-        <span>{progress.progress}%</span>
+        <span>{progress.percentage}%</span>
       </div>
       <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden">
         <div
           className="h-full transition-all duration-300 ease-in-out"
-          style={{ width: `${progress.progress}%`, backgroundColor: '#1C6B62' }}
+          style={{ width: `${progress.percentage}%`, backgroundColor: '#1C6B62' }}
         />
       </div>
     </div>
   );
 
+  // Load saved state on component mount
+  useEffect(() => {
+    const savedAnalysis = localStorage.getItem('websiteAuditAnalysis');
+    const savedScore = localStorage.getItem('websiteAuditScore');
+    const savedUrl = localStorage.getItem('websiteAuditUrl');
+    
+    if (savedAnalysis && savedScore) {
+      try {
+        setAnalysis(JSON.parse(savedAnalysis));
+        setEditableScore(JSON.parse(savedScore));
+        if (savedUrl) {
+          setUrl(savedUrl);
+        }
+      } catch (e) {
+        console.error('Error loading saved state:', e);
+        // Clear invalid saved state
+        localStorage.removeItem('websiteAuditAnalysis');
+        localStorage.removeItem('websiteAuditScore');
+        localStorage.removeItem('websiteAuditUrl');
+      }
+    }
+  }, []);
+
+  // Save state when it changes
+  useEffect(() => {
+    if (analysis && editableScore) {
+      localStorage.setItem('websiteAuditAnalysis', JSON.stringify(analysis));
+      localStorage.setItem('websiteAuditScore', JSON.stringify(editableScore));
+      if (url) {
+        localStorage.setItem('websiteAuditUrl', url);
+      }
+    }
+  }, [analysis, editableScore, url]);
+
+  // Function to clear saved state
+  const clearSavedState = () => {
+    localStorage.removeItem('websiteAuditAnalysis');
+    localStorage.removeItem('websiteAuditScore');
+    localStorage.removeItem('websiteAuditUrl');
+    setAnalysis(null);
+    setEditableScore(null);
+    setUrl('');
+  };
+
+  const handleUrlChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setUrl(e.target.value);
+  };
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setError('');
+    setProgress({ stage: 'initializing', message: 'Starting analysis...', percentage: 0 });
+
+    if (!url) {
+      setError('Please enter a URL');
+      setIsLoading(false);
+      return;
+    }
+
+    const formattedUrl = formatUrl(url);
+    if (!formattedUrl) {
+      setError('Please enter a valid URL');
+      setIsLoading(false);
+      return;
+    }
+
+    const formDataToSend = new FormData();
+    formDataToSend.append('url', formattedUrl);
+
+    fetch('/api/website-audit', {
+      method: 'POST',
+      body: formDataToSend,
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to analyze website');
+        }
+
+        if (!response.body) {
+          throw new Error('No response body');
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'progress') {
+                setProgress({
+                  stage: data.stage,
+                  message: data.message,
+                  percentage: data.percentage
+                });
+              } else if (data.type === 'error') {
+                throw new Error(data.error);
+              } else if (data.type === 'result') {
+                setAnalysis(data.data);
+                setEditableScore(data.data.score);
+                setIsLoading(false);
+                // Scroll to results after a short delay to ensure DOM is updated
+                setTimeout(() => {
+                  const resultsElement = document.getElementById('results');
+                  if (resultsElement) {
+                    resultsElement.scrollIntoView({ behavior: 'smooth' });
+                  }
+                }, 100);
+              }
+            } catch (error) {
+              console.error('Error parsing JSON:', error);
+              throw new Error('Failed to parse server response');
+            }
+          }
+        }
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+        setError(error instanceof Error ? error.message : 'Failed to analyze website');
+        setIsLoading(false);
+      });
+  };
+
+  // Function to recalculate score when criteria are toggled
+  const recalculateScore = (category: string, item: string, completed: boolean) => {
+    if (!editableScore) return;
+
+    const newDetails = { ...editableScore.details };
+    newDetails[category].items[item] = completed;
+    
+    // Recalculate category score
+    const categoryItems = newDetails[category].items;
+    const categoryScore = Object.values(categoryItems).filter(Boolean).length;
+    newDetails[category].score = categoryScore;
+
+    // Recalculate total score
+    const totalPoints = Object.values(newDetails).reduce((sum, cat) => sum + cat.score, 0);
+    const maxPoints = Object.values(newDetails).reduce((sum, cat) => sum + cat.maxScore, 0);
+
+    setEditableScore({
+      totalPoints,
+      maxPoints,
+      percentage: Math.round((totalPoints / maxPoints) * 100),
+      details: newDetails
+    });
+  };
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-16">
         <div className="text-center mb-16">
-          <h1 className="text-5xl font-bold text-gray-900 mb-4">
-            GlamScore Website Audit
+          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+            Website Audit
           </h1>
-          <p className="text-xl text-gray-600 max-w-2xl mx-auto">
-            Enter your beauty business&apos;s website URL to get personalized recommendations
+          <p className="text-xl text-gray-600 flex items-center justify-center gap-2">
+            Get personalized recommendations to improve your website
+            <Link href="/website-scoring" className="group relative ml-2" aria-label="Learn more about scoring criteria">
+              <svg className="w-6 h-6 text-[#4285F4] hover:text-[#3367D6] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-sm text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                Learn more about scoring criteria
+              </span>
+            </Link>
           </p>
           <div className="mt-4 space-x-4">
             <Link 
@@ -676,255 +666,142 @@ export default function WebsiteAudit() {
           </div>
         </div>
 
-        <div className="max-w-md mx-auto bg-white rounded-xl shadow-lg p-8">
+        <div className="bg-white rounded-xl shadow-lg p-8 mb-8">
+          <div className="mb-8">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-4">
+              How to Find Your Website URL
+            </h2>
+            <div className="bg-gray-50 rounded-lg p-6 space-y-4">
+              <ol className="list-decimal list-inside space-y-2 text-gray-700">
+                <li>Go to your website</li>
+                <li>Copy the URL from your browser's address bar</li>
+                <li>Paste it into the input field below</li>
+              </ol>
+              <p className="text-sm text-gray-500 mt-4">
+                Note: Make sure you&apos;re copying the URL from your website&apos;s homepage.
+                The URL should look something like: https://www.yourwebsite.com
+              </p>
+            </div>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
-              <label 
-                htmlFor="url" 
-                className="block text-sm font-medium text-gray-700 mb-2"
-              >
+              <label htmlFor="website-url" className="block text-sm font-medium text-gray-700 mb-2">
                 Website URL
               </label>
               <input
                 type="text"
-                id="url"
+                id="website-url"
                 name="url"
                 value={url}
                 onChange={handleUrlChange}
-                placeholder="Enter your domain (e.g., example.com)"
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#1C6B62] focus:border-[#1C6B62]"
+                placeholder="https://www.yourwebsite.com"
+                className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-[#1C6B62] focus:border-[#1C6B62]"
                 disabled={isLoading}
               />
-              {error && (
-                <p className="mt-2 text-sm text-red-600">{error}</p>
-              )}
             </div>
 
-            {isLoading && (
-              <div className="mt-4">
-                <ProgressBar />
-              </div>
+            {error && (
+              <div className="text-red-600 text-sm">{error}</div>
             )}
 
             <button
               type="submit"
-              className="w-full bg-[#1C6B62] text-white px-8 py-3 rounded-lg hover:bg-[#15554D] transition-colors disabled:bg-[#1C6B62]/50 disabled:cursor-not-allowed"
-              disabled={isLoading || !url}
+              disabled={isLoading}
+              className="w-full px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#1C6B62] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? 'Analyzing...' : 'Get Free Audit'}
+              {isLoading ? 'Analyzing...' : 'Start Analysis'}
             </button>
           </form>
+
+          {isLoading && (
+            <div className="mt-8">
+              <ProgressBar />
+              <p className="text-center text-gray-600">{progress.message}</p>
+            </div>
+          )}
         </div>
 
-        {analysis && (
-          <div className="max-w-4xl mx-auto mt-12 bg-white rounded-xl shadow-lg p-8">
-            <div className="mb-8">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Analysis Results
-              </h2>
-              <div className="flex items-center justify-between">
-                <p className="text-gray-600">Overall Score</p>
-                <div className="text-3xl font-bold text-[#1C6B62]">
-                  {calculateOverallScore(analysis?.websiteAnalysis ?? null)}%
-                </div>
-              </div>
-            </div>
+        {analysis && editableScore && (
+          <div id="results" className="max-w-2xl mx-auto mt-8 sm:mt-12 bg-white rounded-xl shadow-lg p-4 sm:p-8">
+            <h2 className="text-2xl font-semibold text-gray-900 mb-6">
+              Analysis Results
+            </h2>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-              {Object.entries(analysis.websiteAnalysis || {}).map(([category, metrics]) => {
-                if (category === 'overallScore') return null;
-                if (!metrics) return null;
-                
-                const categoryWeights = {
-                  technicalSeo: 30,
-                  onPageSeo: 20,
-                  contentCompleteness: 25,
-                  brandingConsistency: 10,
-                  socialContactIntegration: 10,
-                  securityAccessibility: 5
-                };
-
-                const categoryNames = {
-                  technicalSeo: 'Technical SEO',
-                  onPageSeo: 'On-Page SEO',
-                  contentCompleteness: 'Content Completeness',
-                  brandingConsistency: 'Branding Consistency',
-                  socialContactIntegration: 'Social/Contact Integration',
-                  securityAccessibility: 'Security & Accessibility'
-                };
-
-                const weight = categoryWeights[category as keyof typeof categoryWeights] ?? 0;
-                const name = categoryNames[category as keyof typeof categoryNames] ?? category;
-                const score = (metrics as any).score ?? 0;
-                const status = (metrics as any).status ?? 'yellow';
-
-                return (
-                  <div key={category} className="bg-gray-50 rounded-lg p-6">
-                    <div className="flex items-center justify-between mb-4">
-                      <div>
-                        <h3 className="text-lg font-semibold text-gray-900">
-                          {name}
-                        </h3>
-                        <p className="text-sm text-gray-500">
-                          Weight: {weight}%
-                        </p>
-                      </div>
-                      <div className="flex items-center">
-                        <div className={`w-3 h-3 rounded-full mr-2 ${
-                          status === 'green' ? 'bg-green-500' :
-                          status === 'yellow' ? 'bg-yellow-500' :
-                          'bg-red-500'
-                        }`} />
-                        <span className="text-lg font-semibold text-[#1C6B62]">
-                          {score.toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="space-y-3 text-sm">
-                      {Object.entries(metrics).map(([key, value]) => {
-                        if (key === 'status' || key === 'score') return null;
-                        
-                        if (key === 'coreWebVitals') {
-                          const vitals = value as CoreWebVitals;
-                          if (!vitals) return null;
-                          return (
-                            <div key={key} className="space-y-2">
-                              <p className="font-medium text-gray-700">Core Web Vitals:</p>
-                              <div className="pl-4 space-y-1">
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">LCP</span>
-                                  <span className={(vitals.lcp ?? 0) <= 2.5 ? 'text-green-600' : 'text-red-600'}>
-                                    {(vitals.lcp ?? 0).toFixed(2)}s
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">FID</span>
-                                  <span className={(vitals.fid ?? 0) <= 100 ? 'text-green-600' : 'text-red-600'}>
-                                    {(vitals.fid ?? 0).toFixed(0)}ms
-                                  </span>
-                                </div>
-                                <div className="flex justify-between">
-                                  <span className="text-gray-600">CLS</span>
-                                  <span className={(vitals.cls ?? 0) <= 0.1 ? 'text-green-600' : 'text-red-600'}>
-                                    {(vitals.cls ?? 0).toFixed(2)}
-                                  </span>
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        }
-
-                        if (typeof value === 'boolean') {
-                          return (
-                            <div key={key} className="flex justify-between items-center">
-                              <span className="text-gray-600 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
-                              </span>
-                              <span className={value ? 'text-green-600' : 'text-red-600'}>
-                                {value ? '✓' : '✗'}
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        if (typeof value === 'number') {
-                          return (
-                            <div key={key} className="flex justify-between items-center">
-                              <span className="text-gray-600 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
-                              </span>
-                              <span className="text-gray-900">
-                                {key === 'pageLoadSpeed' ? `${(value ?? 0).toFixed(0)}ms` :
-                                 key === 'keywordPresence' || key === 'altTextCoverage' ? `${(value ?? 0).toFixed(1)}%` :
-                                 key === 'imageQuality' ? `${(value ?? 0).toFixed(1)}/10` :
-                                 value ?? 0}
-                              </span>
-                            </div>
-                          );
-                        }
-
-                        if (Array.isArray(value)) {
-                          return (
-                            <div key={key} className="flex justify-between items-center">
-                              <span className="text-gray-600 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
-                              </span>
-                              <span className="text-gray-900">{value?.length ?? 0}</span>
-                            </div>
-                          );
-                        }
-
-                        if (typeof value === 'string') {
-                          return (
-                            <div key={key} className="flex justify-between items-center">
-                              <span className="text-gray-600 capitalize">
-                                {key.replace(/([A-Z])/g, ' $1').trim()}
-                              </span>
-                              <span className="text-gray-900 truncate max-w-[200px]">{value ?? ''}</span>
-                            </div>
-                          );
-                        }
-
-                        return null;
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="text-center mb-8">
+              <h3 className="text-3xl font-bold text-gray-900 mb-2">
+                Your Website Score
+              </h3>
+              <div className="text-5xl font-bold text-[#4285F4]">
+                {editableScore.percentage}%
+              </div>
+              <p className="text-gray-600 mt-2">
+                {editableScore.totalPoints} out of {editableScore.maxPoints} points
+              </p>
             </div>
 
             <div className="space-y-8">
-              {analysis.recommendations.map((category, index) => (
-                <div key={index} className="border-b border-gray-200 pb-6 last:border-0">
-                  <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-xl font-semibold text-gray-900">
-                      {category.category}
-                    </h3>
-                    <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      category.status === 'green' ? 'bg-green-100 text-green-800' :
-                      category.status === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                      'bg-red-100 text-red-800'
-                    }`}>
-                      {category.status === 'green' ? 'Good' :
-                       category.status === 'yellow' ? 'Needs Improvement' :
-                       'Critical'}
-                    </div>
+              {Object.entries(editableScore.details).map(([category, data]) => (
+                <div key={category} className="border-b border-gray-200 pb-6 last:border-0">
+                  <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                    {category}
+                  </h3>
+                  <div className="space-y-4">
+                    {Object.entries(data.items).map(([item, completed]) => (
+                      <div key={item} className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={completed}
+                          onChange={(e) => recalculateScore(category, item, e.target.checked)}
+                          className="h-5 w-5 text-[#4285F4] border-gray-300 rounded focus:ring-[#4285F4]"
+                        />
+                        <label className="ml-3 text-gray-700">
+                          {item}
+                        </label>
+                      </div>
+                    ))}
                   </div>
-                  
-                  {category.strengths.length > 0 && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-green-600 mb-2">
-                        What's Working Well
-                      </h4>
-                      <ul className="space-y-2">
-                        {category.strengths.map((strength, strengthIndex) => (
-                          <li key={strengthIndex} className="flex items-start">
-                            <span className="text-green-500 mr-2">✓</span>
-                            <span className="text-gray-600">{strength}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
-                  {category.suggestions.length > 0 && (
-                    <div>
-                      <h4 className="text-sm font-medium text-[#1C6B62] mb-2">
-                        Recommendations
-                      </h4>
-                      <ul className="space-y-2">
-                        {category.suggestions.map((suggestion, suggestionIndex) => (
-                          <li key={suggestionIndex} className="flex items-start">
-                            <span className="text-[#1C6B62] mr-2">•</span>
-                            <span className="text-gray-600">{suggestion}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
                 </div>
               ))}
+            </div>
+
+            <div className="mt-8">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                Recommendations
+              </h3>
+              <div className="space-y-6">
+                {analysis.recommendations.map((rec, index) => (
+                  <div key={index} className="bg-gray-50 rounded-lg p-4">
+                    <h4 className="font-semibold text-gray-900 mb-2">
+                      {rec.category}
+                    </h4>
+                    {rec.strengths.length > 0 && (
+                      <div className="mb-3">
+                        <h5 className="text-sm font-medium text-gray-700 mb-1">
+                          Strengths:
+                        </h5>
+                        <ul className="list-disc list-inside text-sm text-gray-600">
+                          {rec.strengths.map((strength, i) => (
+                            <li key={i}>{strength}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {rec.suggestions.length > 0 && (
+                      <div>
+                        <h5 className="text-sm font-medium text-gray-700 mb-1">
+                          Suggestions:
+                        </h5>
+                        <ul className="list-disc list-inside text-sm text-gray-600">
+                          {rec.suggestions.map((suggestion, i) => (
+                            <li key={i}>{suggestion}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

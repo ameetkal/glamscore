@@ -203,8 +203,8 @@ export default function InstagramAudit() {
                   d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
                 />
               </svg>
-              <span className="absolute left-1/2 -translate-x-1/2 -top-8 px-2 py-1 bg-gray-900 text-white text-sm rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
-                Click to learn more
+              <span className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-sm text-white bg-gray-900 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                Learn more about scoring criteria
               </span>
             </Link>
           </p>
@@ -341,14 +341,14 @@ export default function InstagramAudit() {
                 <h2 className="text-2xl font-bold text-gray-900 mb-2">
                   Your Instagram Score
                 </h2>
-                <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-r from-[#1C6B62] to-[#15554D] text-white">
+                <div className="inline-flex items-center justify-center w-32 h-32 rounded-full bg-gradient-to-r from-[#E1306C] to-[#833AB4] text-white">
                   <span className="text-4xl font-bold">{editableScore.percentage}%</span>
                 </div>
                 <p className="mt-4 text-gray-600">
                   {editableScore.totalPoints} out of {editableScore.maxPoints} points
                 </p>
                 <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
-                  We use AI to analyze your profile, so some items may be incorrectly scored. Click the checkmarks to adjust any items that don't match your profile.
+                  We use AI to analyze your profile, so some items may be incorrectly scored. Click the checkboxes to adjust any items that don't match your profile.
                 </p>
               </div>
               <button
@@ -369,24 +369,13 @@ export default function InstagramAudit() {
                   <div className="space-y-2">
                     {Object.entries(details.items).map(([item, completed]) => (
                       <div key={item} className="flex items-center group">
-                        <button
-                          onClick={() => recalculateScore(category, item, !completed)}
-                          className={`w-5 h-5 rounded-full mr-2 flex items-center justify-center transition-colors ${
-                            completed ? 'bg-green-500 hover:bg-red-500' : 'bg-red-500 hover:bg-green-500'
-                          }`}
-                          title={completed ? "Mark as incomplete" : "Mark as complete"}
-                        >
-                          {completed ? (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3 h-3 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          )}
-                        </button>
-                        <span className="text-gray-600 group-hover:text-gray-900 transition-colors">{item}</span>
+                        <input
+                          type="checkbox"
+                          checked={completed}
+                          onChange={() => recalculateScore(category, item, !completed)}
+                          className="w-4 h-4 text-[#E1306C] border-gray-300 rounded focus:ring-[#E1306C]"
+                        />
+                        <span className="ml-2 text-gray-600 group-hover:text-gray-900 transition-colors">{item}</span>
                       </div>
                     ))}
                   </div>
