@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
+import { INSTAGRAM_SCORING_CRITERIA, ScoringResult } from '@/types/instagram';
 
 interface Recommendation {
   category: string;
@@ -115,6 +116,67 @@ async function analyzeInstagramHandle(handle: string) {
   }
 }
 
+function calculateScore(analysis: any): ScoringResult {
+  const details: ScoringResult['details'] = {};
+  let totalPoints = 0;
+  let maxPoints = 0;
+
+  // Profile Optimization
+  const profileOptimization = {
+    score: 0,
+    maxScore: INSTAGRAM_SCORING_CRITERIA[0].items.length,
+    items: {
+      "Profile picture quality and relevance": analysis.hasProfilePicture,
+      "Bio completeness and clarity": analysis.hasBio,
+      "Story highlights organization": analysis.hasHighlights,
+      "Link in bio optimization": analysis.hasBio && analysis.hasProfilePicture // Assuming bio with link
+    }
+  };
+  profileOptimization.score = Object.values(profileOptimization.items).filter(Boolean).length;
+  totalPoints += profileOptimization.score;
+  maxPoints += profileOptimization.maxScore;
+  details["Profile Optimization"] = profileOptimization;
+
+  // Content Strategy
+  const contentStrategy = {
+    score: 0,
+    maxScore: INSTAGRAM_SCORING_CRITERIA[1].items.length,
+    items: {
+      "Post frequency and consistency": analysis.postCount >= 6,
+      "Content variety and quality": analysis.postCount >= 12,
+      "Grid layout and aesthetics": analysis.gridLayout !== undefined,
+      "Caption quality and engagement": analysis.hasBio // Using bio as a proxy for caption quality
+    }
+  };
+  contentStrategy.score = Object.values(contentStrategy.items).filter(Boolean).length;
+  totalPoints += contentStrategy.score;
+  maxPoints += contentStrategy.maxScore;
+  details["Content Strategy"] = contentStrategy;
+
+  // Engagement
+  const engagement = {
+    score: 0,
+    maxScore: INSTAGRAM_SCORING_CRITERIA[2].items.length,
+    items: {
+      "Response rate to comments": analysis.hasPinnedPosts, // Using pinned posts as a proxy
+      "Story engagement": analysis.hasHighlights,
+      "Community interaction": analysis.hasBio, // Using bio as a proxy
+      "Hashtag strategy": analysis.hasBio // Using bio as a proxy
+    }
+  };
+  engagement.score = Object.values(engagement.items).filter(Boolean).length;
+  totalPoints += engagement.score;
+  maxPoints += engagement.maxScore;
+  details["Engagement"] = engagement;
+
+  return {
+    totalPoints,
+    maxPoints,
+    percentage: Math.round((totalPoints / maxPoints) * 100),
+    details
+  };
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -140,6 +202,9 @@ export async function POST(request: Request) {
     // Type assertion since we know imageAnalysis will be defined here
     // due to the validation check at the start of the function
     const analysis = imageAnalysis as NonNullable<typeof imageAnalysis>;
+
+    // Calculate score based on analysis
+    const score = calculateScore(analysis);
 
     // Generate recommendations based on the analysis
     const recommendations: Recommendation[] = [
@@ -214,32 +279,17 @@ export async function POST(request: Request) {
       recommendations[1].suggestions.unshift('Pin your best-performing posts to the top of your feed to make a strong first impression');
     }
 
-    if (analysis.hasBusinessType) {
-      recommendations[0].strengths.push('Business account type is set up - this helps with local discovery and analytics');
-    } else {
-      recommendations[0].suggestions.unshift('Set up your account as a Business account and select "Salon" as your business type for better local visibility');
-    }
-
-    const response = {
-      timestamp: new Date().toISOString(),
-      recommendations,
-      imageAnalysis: {
-        ...analysis,
-        // Remove confidence scores from the response
-        confidence: undefined
+    return NextResponse.json({
+      data: {
+        recommendations,
+        score,
+        timestamp: new Date().toISOString()
       }
-    };
-
-    return NextResponse.json({ 
-      success: true, 
-      message: 'Analysis completed successfully',
-      data: response
     });
   } catch (error) {
-    console.error('Error processing audit request:', error);
-    const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
+    console.error('Error processing request:', error);
     return NextResponse.json(
-      { error: errorMessage },
+      { error: 'Failed to process the request' },
       { status: 500 }
     );
   }

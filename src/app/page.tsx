@@ -1,8 +1,23 @@
 "use client";
 
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import { ScoringResult } from '@/types/instagram';
 
 export default function Home() {
+  const [latestScore, setLatestScore] = useState<ScoringResult | null>(null);
+
+  useEffect(() => {
+    const savedScore = localStorage.getItem('instagramAuditScore');
+    if (savedScore) {
+      try {
+        setLatestScore(JSON.parse(savedScore));
+      } catch (e) {
+        console.error('Error loading saved score:', e);
+      }
+    }
+  }, []);
+
   return (
     <main className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
       <div className="container mx-auto px-4 py-16">
@@ -14,12 +29,19 @@ export default function Home() {
             Get personalized recommendations to improve your beauty business&apos;s online presence
           </p>
           <div className="flex justify-center space-x-4 flex-wrap">
-            <Link 
-              href="/instagram-audit" 
-              className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
-            >
-              Instagram Profile Audit
-            </Link>
+            <div className="flex flex-col items-center">
+              <Link 
+                href="/instagram-audit" 
+                className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
+              >
+                Instagram Profile Audit
+              </Link>
+              {latestScore && (
+                <div className="text-sm text-gray-600">
+                  Latest Score: {latestScore.percentage}%
+                </div>
+              )}
+            </div>
             <Link 
               href="/website-audit" 
               className="inline-flex items-center px-6 py-3 border border-transparent text-base font-medium rounded-md text-white bg-[#1C6B62] hover:bg-[#15554D] transition-colors mb-4"
