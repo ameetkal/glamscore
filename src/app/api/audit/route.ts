@@ -8,6 +8,11 @@ interface Recommendation {
   strengths: string[];
 }
 
+interface ErrorResponse {
+  error: string;
+  details?: unknown;
+}
+
 async function analyzeProfileImage(imageBuffer: Buffer) {
   try {
     // Get image metadata
@@ -176,6 +181,15 @@ function calculateScore(analysis: any): ScoringResult {
     details
   };
 }
+
+const errorResponse = (error: string, details?: unknown): Response => {
+  const response: ErrorResponse = { error };
+  if (details) response.details = details;
+  return new Response(JSON.stringify(response), {
+    status: 400,
+    headers: { 'Content-Type': 'application/json' }
+  });
+};
 
 export async function POST(request: Request) {
   try {

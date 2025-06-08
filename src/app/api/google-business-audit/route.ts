@@ -1,22 +1,29 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import type { Page } from 'puppeteer';
 import puppeteer from 'puppeteer';
 import sharp from 'sharp';
 import { GOOGLE_BUSINESS_SCORING_CRITERIA, ScoringResult } from '@/types/google-business';
 
-// Helper function to send progress updates
-function sendProgress(stage: string) {
-  return new TextEncoder().encode(
-    JSON.stringify({ type: 'progress', stage }) + '\n'
-  );
+interface ProgressData {
+  message: string;
+  percentage: number;
 }
 
-// Helper function to send final result
-function sendResult(data: any) {
-  return new TextEncoder().encode(
-    JSON.stringify({ type: 'result', data }) + '\n'
-  );
+interface ErrorResponse {
+  error: string;
+  details?: unknown;
 }
+
+const sendProgress = (stage: string, percentage: number): string => {
+  const data: ProgressData = { message: stage, percentage };
+  return JSON.stringify({ type: 'progress', data });
+};
+
+const sendError = (error: string, details?: unknown): string => {
+  const response: ErrorResponse = { error };
+  if (details) response.details = details;
+  return JSON.stringify({ type: 'error', data: response });
+};
 
 // Helper function to analyze profile information
 async function analyzeProfile(page: Page) {
@@ -432,25 +439,25 @@ export async function POST(request: NextRequest) {
             await page.goto(url, { waitUntil: 'networkidle0' });
 
             // Send progress updates
-            controller.enqueue(sendProgress('loading_profile'));
+            controller.enqueue(sendProgress('loading_profile', 0));
             await page.waitForSelector('h1.DUwDvf', { timeout: 10000 });
 
-            controller.enqueue(sendProgress('analyzing_profile'));
+            controller.enqueue(sendProgress('analyzing_profile', 25));
             const profile = await analyzeProfile(page);
 
-            controller.enqueue(sendProgress('analyzing_visuals'));
+            controller.enqueue(sendProgress('analyzing_visuals', 50));
             const photos = await analyzePhotos(page);
 
-            controller.enqueue(sendProgress('analyzing_information'));
+            controller.enqueue(sendProgress('analyzing_information', 75));
             const information = await analyzeInformation(page);
 
-            controller.enqueue(sendProgress('analyzing_reviews'));
+            controller.enqueue(sendProgress('analyzing_reviews', 90));
             const reviews = await analyzeReviews(page);
 
-            controller.enqueue(sendProgress('analyzing_posts'));
+            controller.enqueue(sendProgress('analyzing_posts', 95));
             const posts = await analyzePosts(page);
 
-            controller.enqueue(sendProgress('analyzing_services'));
+            controller.enqueue(sendProgress('analyzing_services', 100));
             const services = await analyzeServices(page);
 
             await browser.close();

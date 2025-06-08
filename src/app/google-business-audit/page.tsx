@@ -325,7 +325,7 @@ export default function GoogleBusinessAudit() {
                 <li>Click on your business listing</li>
                 <li>Copy the URL from your browser&apos;s address bar</li>
               </ol>
-              <p className="text-sm text-gray-500 mt-4">
+              <p className="text-sm text-gray-500 mt-2 max-w-md mx-auto">
                 Note: The URL should look something like: https://www.google.com/maps/place/Your+Business+Name
               </p>
             </div>
