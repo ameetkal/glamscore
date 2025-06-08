@@ -14,9 +14,24 @@ interface ErrorResponse {
   details?: unknown;
 }
 
+interface ReviewDetail {
+  reviewText: string;
+  hasResponse: boolean;
+  rating: number;
+}
+
+interface ReviewsAnalysis {
+  reviewElementsCount: number;
+  reviewDetails: ReviewDetail[];
+  averageRating: number;
+  responseRate: number;
+  reviewsAnalyzed: number;
+  reviewsWithResponses: number;
+}
+
 const sendProgress = (stage: string, percentage: number): string => {
   const data: ProgressData = { message: stage, percentage };
-  return JSON.stringify({ type: 'progress', data });
+  return JSON.stringify({ type: 'progress', data }) + '\n';
 };
 
 const sendError = (error: string, details?: unknown): string => {
@@ -58,33 +73,74 @@ async function analyzeProfile(page: Page) {
 async function analyzePhotos(page: Page) {
   const photoInfo = await page.evaluate(() => {
     // Updated selectors for Google Maps photos
-    const photoElements = document.querySelectorAll('button[jsaction*="photos"] img, button[aria-label*="photo"] img');
-    const hasProfilePhoto = Array.from(photoElements).some(img => 
-      img.getAttribute('alt')?.toLowerCase().includes('profile') || 
-      img.getAttribute('aria-label')?.toLowerCase().includes('profile')
+    const photoElements = document.querySelectorAll('button[jsaction*="photos"] img, button[aria-label*="photo"] img, div[role="img"]');
+    console.log('Found photo elements:', photoElements.length); // Debug log
+
+    // More comprehensive photo analysis
+    const photos = Array.from(photoElements).map(img => {
+      const alt = img.getAttribute('alt')?.toLowerCase() || '';
+      const ariaLabel = img.getAttribute('aria-label')?.toLowerCase() || '';
+      const src = img.getAttribute('src') || '';
+      const title = img.getAttribute('title')?.toLowerCase() || '';
+      
+      return {
+        alt,
+        ariaLabel,
+        src,
+        title,
+        text: `${alt} ${ariaLabel} ${title}`.toLowerCase()
+      };
+    });
+
+    console.log('Photo details:', photos); // Debug log
+
+    const hasProfilePhoto = photos.some(photo => 
+      photo.text.includes('profile') || 
+      photo.text.includes('logo') ||
+      photo.text.includes('business')
     );
-    const hasCoverPhoto = Array.from(photoElements).some(img => 
-      img.getAttribute('alt')?.toLowerCase().includes('cover') || 
-      img.getAttribute('aria-label')?.toLowerCase().includes('cover')
+
+    const hasCoverPhoto = photos.some(photo => 
+      photo.text.includes('cover') || 
+      photo.text.includes('banner') ||
+      photo.text.includes('header')
     );
-    const hasInteriorPhotos = Array.from(photoElements).some(img => 
-      img.getAttribute('alt')?.toLowerCase().includes('interior') || 
-      img.getAttribute('aria-label')?.toLowerCase().includes('interior')
+
+    const hasInteriorPhotos = photos.some(photo => 
+      photo.text.includes('interior') || 
+      photo.text.includes('inside') ||
+      photo.text.includes('salon') ||
+      photo.text.includes('spa') ||
+      photo.text.includes('store') ||
+      photo.text.includes('shop')
     );
-    const hasExteriorPhotos = Array.from(photoElements).some(img => 
-      img.getAttribute('alt')?.toLowerCase().includes('exterior') || 
-      img.getAttribute('aria-label')?.toLowerCase().includes('exterior')
+
+    const hasExteriorPhotos = photos.some(photo => 
+      photo.text.includes('exterior') || 
+      photo.text.includes('outside') ||
+      photo.text.includes('building') ||
+      photo.text.includes('storefront') ||
+      photo.text.includes('facade')
     );
+
+    const totalPhotos = photos.length;
     
-    return { hasProfilePhoto, hasCoverPhoto, hasInteriorPhotos, hasExteriorPhotos };
+    return { 
+      hasProfilePhoto, 
+      hasCoverPhoto, 
+      hasInteriorPhotos, 
+      hasExteriorPhotos,
+      totalPhotos,
+      photoDetails: photos // Include for debugging
+    };
   });
 
   console.log('Photos Analysis:', photoInfo); // Debug log
 
   const status = 
-    photoInfo.hasProfilePhoto && photoInfo.hasCoverPhoto && (photoInfo.hasInteriorPhotos || photoInfo.hasExteriorPhotos)
+    photoInfo.hasProfilePhoto && photoInfo.hasCoverPhoto && (photoInfo.hasInteriorPhotos || photoInfo.hasExteriorPhotos) && photoInfo.totalPhotos >= 5
       ? 'green'
-      : photoInfo.hasProfilePhoto && (photoInfo.hasCoverPhoto || photoInfo.hasInteriorPhotos || photoInfo.hasExteriorPhotos)
+      : photoInfo.hasProfilePhoto && (photoInfo.hasCoverPhoto || photoInfo.hasInteriorPhotos || photoInfo.hasExteriorPhotos) && photoInfo.totalPhotos >= 3
         ? 'yellow'
         : 'red';
 
@@ -122,33 +178,80 @@ async function analyzeInformation(page: Page) {
 }
 
 // Helper function to analyze reviews
-async function analyzeReviews(page: Page) {
-  const reviewInfo = await page.evaluate(() => {
-    // Updated selectors for Google Maps reviews
-    const ratingElement = document.querySelector('div.F7nice span[aria-hidden="true"]');
-    const reviewsElement = document.querySelector('div.F7nice span[aria-label*="reviews"]');
-    const responsesElement = document.querySelector('div[aria-label*="responses"]');
+async function analyzeReviews(page: Page): Promise<ReviewsAnalysis> {
+  try {
+    // Wait for reviews to load
+    await page.waitForSelector('.F7nice', { timeout: 10000 }).catch(() => null);
     
-    const averageRating = parseFloat(ratingElement?.textContent?.trim() || '0');
-    const totalReviews = parseInt(reviewsElement?.textContent?.replace(/[^0-9]/g, '') || '0');
-    const responseRate = parseFloat(responsesElement?.textContent?.replace(/[^0-9.]/g, '') || '0');
-    
-    return { averageRating, totalReviews, responseRate };
-  });
+    // Get total reviews and average rating from the main business profile header
+    const totalReviews = await page.$eval('.F7nice span[aria-label*="reviews"]', (el) => {
+      const label = el.getAttribute('aria-label') || '';
+      const match = label.match(/(\d+)\s+reviews/);
+      return match ? parseInt(match[1]) : 0;
+    }).catch(() => 0);
 
-  console.log('Reviews Analysis:', reviewInfo); // Debug log
+    const averageRating = await page.$eval('.F7nice span[aria-hidden="true"]', (el) => {
+      return parseFloat(el.textContent || '0');
+    }).catch(() => 0);
 
-  const status = 
-    reviewInfo.averageRating >= 4.5 && reviewInfo.totalReviews >= 50 && reviewInfo.responseRate >= 80
-      ? 'green'
-      : reviewInfo.averageRating >= 4.0 && reviewInfo.totalReviews >= 20 && reviewInfo.responseRate >= 50
-        ? 'yellow'
-        : 'red';
+    console.log(`Profile shows ${totalReviews} total reviews with ${averageRating} average rating`);
 
-  return {
-    ...reviewInfo,
-    status
-  };
+    // Get all review elements from the main reviews section
+    const reviewElements = await page.$$('.jftiEf');
+    console.log(`Found ${reviewElements.length} review elements`);
+
+    const reviewDetails: ReviewDetail[] = [];
+
+    for (const element of reviewElements) {
+      try {
+        // Get review text
+        const reviewText = await element.$eval('.wiI7pd', (el) => el.textContent || '').catch(() => '');
+        
+        // Check for response
+        const responseElement = await element.$('.CDe7pd');
+        const hasResponse = !!responseElement;
+        
+        // Get rating from star elements
+        const starElements = await element.$$('.rFrJzc:not(.UpDOYb)');
+        const rating = starElements.length;
+
+        reviewDetails.push({
+          reviewText,
+          hasResponse,
+          rating
+        });
+      } catch (error) {
+        console.error('Error processing review element:', error);
+      }
+    }
+
+    // Calculate response rate based on visible reviews
+    const reviewsWithResponses = reviewDetails.filter(review => review.hasResponse).length;
+    const reviewsAnalyzed = reviewDetails.length;
+    const responseRate = totalReviews > 0 ? (reviewsWithResponses / totalReviews) * 100 : 0;
+
+    const result = {
+      reviewElementsCount: totalReviews, // Use the total from profile header
+      reviewDetails,
+      averageRating, // Use the average from profile header
+      responseRate,
+      reviewsAnalyzed, // Add number of reviews analyzed
+      reviewsWithResponses // Add number of reviews with responses
+    };
+
+    console.log('Final reviews analysis result:', result);
+    return result;
+  } catch (error) {
+    console.error('Error in analyzeReviews:', error);
+    return {
+      reviewElementsCount: 0,
+      reviewDetails: [],
+      averageRating: 0,
+      responseRate: 0,
+      reviewsAnalyzed: 0,
+      reviewsWithResponses: 0
+    };
+  }
 }
 
 // Helper function to analyze posts
@@ -357,11 +460,11 @@ function createScoringResult(analysis: any): ScoringResult {
       "Photo quality meets professional standards": Boolean(analysis.photos.hasProfilePhoto && analysis.photos.hasCoverPhoto)
     },
     "Reviews & Ratings": {
-      "Average rating is 4.0 or higher": analysis.reviews.averageRating >= 4.0,
+      "Average rating is 4.5 or higher": analysis.reviews.averageRating >= 4.5,
       "Owner responses to reviews are present": analysis.reviews.responseRate > 0,
       "Response rate to reviews is high": analysis.reviews.responseRate >= 50,
       "Review quality is high": analysis.reviews.totalReviews >= 20,
-      "Recent reviews are positive": analysis.reviews.averageRating >= 4.0
+      "Recent reviews are positive": analysis.reviews.averageRating >= 4.5
     },
     "Posts & Updates": {
       "Regular posting schedule (2+ posts/month)": analysis.posts.postFrequency >= 2,
@@ -415,71 +518,128 @@ export async function POST(request: NextRequest) {
         const screenshot = formData.get('screenshot') as File;
 
         if (!url && !screenshot) {
-          controller.enqueue(encoder.encode(JSON.stringify({
-            type: 'error',
-            error: 'Either URL or screenshot is required'
-          }) + '\n'));
+          controller.enqueue(encoder.encode(sendError('Please provide either a URL or a screenshot')));
           controller.close();
           return;
         }
 
         let analysis;
+        let browser;
         try {
           if (url) {
             if (!isValidGoogleMapsUrl(url)) {
               throw new Error('Please enter a valid Google Maps URL');
             }
 
-            const browser = await puppeteer.launch({
-              headless: 'new',
-              args: ['--no-sandbox', '--disable-setuid-sandbox']
+            browser = await puppeteer.launch({
+              headless: true,
+              args: [
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+                '--disable-accelerated-2d-canvas',
+                '--disable-gpu'
+              ]
             });
 
             const page = await browser.newPage();
-            await page.goto(url, { waitUntil: 'networkidle0' });
+            await page.setViewport({ width: 1280, height: 800 });
+            
+            // Set a longer timeout
+            page.setDefaultNavigationTimeout(60000); // 60 seconds
+            page.setDefaultTimeout(60000);
 
             // Send progress updates
-            controller.enqueue(sendProgress('loading_profile', 0));
-            await page.waitForSelector('h1.DUwDvf', { timeout: 10000 });
+            controller.enqueue(encoder.encode(sendProgress('loading_profile', 0)));
+            
+            try {
+              // Navigate with more options
+              await page.goto(url, { 
+                waitUntil: ['networkidle0', 'domcontentloaded'],
+                timeout: 60000
+              });
 
-            controller.enqueue(sendProgress('analyzing_profile', 25));
-            const profile = await analyzeProfile(page);
+              // Wait for either the business name or an error message
+              await Promise.race([
+                page.waitForSelector('h1.DUwDvf', { timeout: 60000 }),
+                page.waitForSelector('div[role="alert"]', { timeout: 60000 })
+              ]);
 
-            controller.enqueue(sendProgress('analyzing_visuals', 50));
-            const photos = await analyzePhotos(page);
+              // Check if we got an error message
+              const errorMessage = await page.evaluate(() => {
+                const alert = document.querySelector('div[role="alert"]');
+                return alert ? alert.textContent : null;
+              });
 
-            controller.enqueue(sendProgress('analyzing_information', 75));
-            const information = await analyzeInformation(page);
+              if (errorMessage) {
+                throw new Error(`Google Maps error: ${errorMessage}`);
+              }
 
-            controller.enqueue(sendProgress('analyzing_reviews', 90));
-            const reviews = await analyzeReviews(page);
+              // Log the raw HTML for debugging
+              const rawHtml = await page.content();
+              console.log('Raw HTML:', rawHtml);
 
-            controller.enqueue(sendProgress('analyzing_posts', 95));
-            const posts = await analyzePosts(page);
+              controller.enqueue(encoder.encode(sendProgress('analyzing_profile', 25)));
+              const profile = await analyzeProfile(page);
+              console.log('Profile Analysis Results:', JSON.stringify(profile, null, 2));
 
-            controller.enqueue(sendProgress('analyzing_services', 100));
-            const services = await analyzeServices(page);
+              controller.enqueue(encoder.encode(sendProgress('analyzing_visuals', 50)));
+              const photos = await analyzePhotos(page);
+              console.log('Photos Analysis Results:', JSON.stringify(photos, null, 2));
 
-            await browser.close();
+              controller.enqueue(encoder.encode(sendProgress('analyzing_information', 75)));
+              const information = await analyzeInformation(page);
+              console.log('Information Analysis Results:', JSON.stringify(information, null, 2));
 
-            analysis = {
-              profile,
-              photos,
-              information,
-              reviews,
-              posts,
-              services
-            };
+              controller.enqueue(encoder.encode(sendProgress('analyzing_reviews', 90)));
+              const reviews = await analyzeReviews(page) as ReviewsAnalysis;
+              console.log('Reviews Analysis:', reviews);
+              
+              const reviewsAnalysisResults = {
+                averageRating: reviews.averageRating,
+                totalReviews: reviews.reviewElementsCount,
+                responseRate: (reviews.reviewDetails.filter(review => review.hasResponse).length / reviews.reviewDetails.length) * 100,
+                reviewsWithResponses: reviews.reviewDetails.filter(review => review.hasResponse).length,
+                reviewElementsCount: reviews.reviewElementsCount,
+                reviewDetails: reviews.reviewDetails,
+                status: reviews.reviewElementsCount > 0 ? 'green' : 'red'
+              };
+              console.log('Final reviews analysis results:', reviewsAnalysisResults);
+
+              controller.enqueue(encoder.encode(sendProgress('analyzing_posts', 95)));
+              const posts = await analyzePosts(page);
+              console.log('Posts Analysis Results:', JSON.stringify(posts, null, 2));
+
+              controller.enqueue(encoder.encode(sendProgress('analyzing_services', 100)));
+              const services = await analyzeServices(page);
+              console.log('Services Analysis Results:', JSON.stringify(services, null, 2));
+
+              analysis = {
+                profile,
+                photos,
+                information,
+                reviews: reviewsAnalysisResults,
+                posts,
+                services
+              };
+            } catch (pageError: unknown) {
+              console.error('Page navigation error:', pageError);
+              throw new Error(`Failed to load Google Business Profile: ${pageError instanceof Error ? pageError.message : 'Unknown error'}`);
+            } finally {
+              if (browser) {
+                await browser.close();
+              }
+            }
           } else if (screenshot) {
-            // Handle screenshot analysis
-            const arrayBuffer = await screenshot.arrayBuffer();
-            const buffer = Buffer.from(arrayBuffer);
-            analysis = await analyzeScreenshot(buffer);
+            throw new Error('Screenshot analysis is not implemented yet');
           }
         } catch (err) {
+          console.error('Analysis error:', err);
           controller.enqueue(encoder.encode(JSON.stringify({
             type: 'error',
-            error: err instanceof Error ? err.message : 'Failed to analyze Google Business Profile'
+            data: {
+              error: err instanceof Error ? err.message : 'Failed to analyze Google Business Profile'
+            }
           }) + '\n'));
           controller.close();
           return;
@@ -502,22 +662,17 @@ export async function POST(request: NextRequest) {
         }) + '\n'));
         controller.close();
       } catch (error) {
-        console.error('Error processing Google Business audit request:', error);
-        const errorMessage = error instanceof Error ? error.message : 'Failed to process request';
+        console.error('Stream error:', error);
         controller.enqueue(encoder.encode(JSON.stringify({
           type: 'error',
-          error: errorMessage
+          data: {
+            error: error instanceof Error ? error.message : 'An unexpected error occurred'
+          }
         }) + '\n'));
         controller.close();
       }
     }
   });
 
-  return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
-  });
+  return new NextResponse(stream);
 } 

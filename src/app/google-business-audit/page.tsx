@@ -188,12 +188,17 @@ export default function GoogleBusinessAudit() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
-    setProgress({ message: 'Starting analysis...', percentage: 0 });
+    setError('');
     setResult(null);
     setScore(null);
+    
+    if (!url) {
+      setError('Please provide a Google Business Profile URL');
+      return;
+    }
 
+    setLoading(true);
+    
     try {
       const formData = new FormData();
       formData.append('url', url);
@@ -217,37 +222,42 @@ export default function GoogleBusinessAudit() {
         if (done) break;
 
         const text = new TextDecoder().decode(value);
-        const lines = text.split('\n').filter(Boolean);
+        const lines = text.split('\n').filter(line => line.trim());
 
         for (const line of lines) {
           try {
             const data = JSON.parse(line);
+            
             if (data.type === 'progress') {
-              // Map the stage to a message and percentage
-              const stageMessages: Record<string, { message: string; percentage: number }> = {
-                'loading_profile': { message: 'Loading profile...', percentage: 10 },
-                'analyzing_profile': { message: 'Analyzing profile information...', percentage: 20 },
-                'analyzing_visuals': { message: 'Analyzing visual content...', percentage: 40 },
-                'analyzing_information': { message: 'Analyzing business information...', percentage: 60 },
-                'analyzing_reviews': { message: 'Analyzing reviews and ratings...', percentage: 70 },
-                'analyzing_posts': { message: 'Analyzing posts and updates...', percentage: 80 },
-                'analyzing_services': { message: 'Analyzing services...', percentage: 90 }
-              };
-              const progress = stageMessages[data.stage] || { message: data.stage, percentage: 0 };
-              setProgress(progress);
+              setProgress({
+                message: data.data.message,
+                percentage: data.data.percentage
+              });
             } else if (data.type === 'error') {
-              throw new Error(data.error);
+              throw new Error(data.data.error);
             } else if (data.type === 'result') {
               setResult(data.data);
               setScore(data.data.score);
-              // Save score to localStorage
+              // Save to localStorage
+              localStorage.setItem('googleBusinessAuditAnalysis', JSON.stringify(data.data));
               localStorage.setItem('googleBusinessAuditScore', JSON.stringify(data.data.score));
+              if (url) {
+                localStorage.setItem('googleBusinessAuditUrl', url);
+              }
             }
           } catch (e) {
             console.error('Error parsing line:', line, e);
           }
         }
       }
+
+      // Scroll to results after a short delay to ensure the content is rendered
+      setTimeout(() => {
+        resultsRef.current?.scrollIntoView({ 
+          behavior: 'smooth',
+          block: 'start'
+        });
+      }, 100);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
@@ -394,19 +404,93 @@ export default function GoogleBusinessAudit() {
                     {category}
                   </h3>
                   <div className="space-y-4">
-                    {Object.entries(data.items).map(([item, completed]) => (
-                      <div key={item} className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={completed}
-                          onChange={(e) => recalculateScore(category, item, e.target.checked)}
-                          className="h-5 w-5 text-[#4285F4] border-gray-300 rounded focus:ring-[#4285F4]"
-                        />
-                        <label className="ml-3 text-gray-700">
-                          {item}
-                        </label>
-                      </div>
-                    ))}
+                    {Object.entries(data.items).map(([item, isChecked]) => {
+                      // Get the relevant data for this item
+                      let foundData = '';
+                      switch (category) {
+                        case 'Profile Completeness':
+                          if (item.includes('Business name')) {
+                            foundData = result.googleBusinessAnalysis.profile.businessName;
+                          } else if (item.includes('category')) {
+                            foundData = result.googleBusinessAnalysis.profile.category;
+                          } else if (item.includes('description')) {
+                            foundData = result.googleBusinessAnalysis.profile.description;
+                          } else if (item.includes('hours')) {
+                            foundData = result.googleBusinessAnalysis.information.hours ? 'Hours are listed' : 'No hours listed';
+                          } else if (item.includes('location')) {
+                            foundData = result.googleBusinessAnalysis.information.address ? 'Address is verified' : 'No address found';
+                          }
+                          break;
+                        case 'Visual Content':
+                          if (item.includes('Profile photo')) {
+                            foundData = result.googleBusinessAnalysis.photos.hasProfilePhoto ? 'Profile photo found' : 'No profile photo';
+                          } else if (item.includes('Cover photo')) {
+                            foundData = result.googleBusinessAnalysis.photos.hasCoverPhoto ? 'Cover photo found' : 'No cover photo';
+                          } else if (item.includes('showcase')) {
+                            foundData = result.googleBusinessAnalysis.photos.hasInteriorPhotos || result.googleBusinessAnalysis.photos.hasExteriorPhotos 
+                              ? 'Business photos found' 
+                              : 'No business photos';
+                          } else if (item.includes('updated')) {
+                            foundData = result.googleBusinessAnalysis.photos.totalPhotos > 0 
+                              ? `${result.googleBusinessAnalysis.photos.totalPhotos} photos found` 
+                              : 'No photos found';
+                          }
+                          break;
+                        case 'Reviews & Ratings':
+                          if (item.includes('Average rating')) {
+                            foundData = `Current rating: ${result.googleBusinessAnalysis.reviews.averageRating.toFixed(1)}`;
+                          } else if (item.includes('Owner responses')) {
+                            foundData = `Response rate: ${result.googleBusinessAnalysis.reviews.responseRate}%`;
+                          } else if (item.includes('Review quality')) {
+                            foundData = `Total reviews: ${result.googleBusinessAnalysis.reviews.totalReviews}`;
+                          }
+                          break;
+                        case 'Posts & Updates':
+                          if (item.includes('Regular posting')) {
+                            foundData = `${result.googleBusinessAnalysis.posts.postFrequency} posts found`;
+                          } else if (item.includes('engagement')) {
+                            foundData = `Average engagement: ${result.googleBusinessAnalysis.posts.postEngagement.toFixed(1)}`;
+                          }
+                          break;
+                        case 'Local SEO':
+                          if (item.includes('Keywords')) {
+                            foundData = result.googleBusinessAnalysis.profile.description 
+                              ? 'Description found' 
+                              : 'No description';
+                          } else if (item.includes('NAP')) {
+                            foundData = result.googleBusinessAnalysis.information.phone && result.googleBusinessAnalysis.information.address 
+                              ? 'NAP information complete' 
+                              : 'Missing NAP information';
+                          }
+                          break;
+                        case 'Engagement & Interaction':
+                          if (item.includes('response to messages')) {
+                            foundData = result.googleBusinessAnalysis.information.phone 
+                              ? 'Phone number available' 
+                              : 'No phone number';
+                          } else if (item.includes('interaction rate')) {
+                            foundData = `Post engagement: ${result.googleBusinessAnalysis.posts.postEngagement.toFixed(1)}`;
+                          }
+                          break;
+                      }
+
+                      return (
+                        <div key={item} className="flex items-start space-x-3">
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={(e) => recalculateScore(category, item, e.target.checked)}
+                            className="mt-1 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                          />
+                          <div>
+                            <label className="text-sm text-gray-700">{item}</label>
+                            {foundData && (
+                              <p className="text-xs text-gray-500 mt-1">What we found: {foundData}</p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               ))}
